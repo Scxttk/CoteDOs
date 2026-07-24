@@ -222,8 +222,9 @@ final class NotchWindowController {
             .sink { [weak self] in self?.refreshIdlePresence() }
             .store(in: &cancellables)
 
-        // The dodge sliders in Settings act live: any settings change
-        // re-derives the dodge position (a no-op while not dodging).
+        // Settings changes can move the pill width (spectrum-only mode,
+        // wave width), which shifts the dodge anchor — re-derive it live
+        // (a no-op while not dodging).
         UserSettings.shared.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.applySafariDodge() }
@@ -461,7 +462,7 @@ final class NotchWindowController {
             let pillWidth = viewModel.collapsedWidth(isPlaying: hasAudioHero, hasItems: !shelf.items.isEmpty, timerText: pomodoro.pillText)
             let centerX = SafariFullscreenMonitor.dodgePillCenterX(
                 urlFieldMaxX: dodge.urlFieldFrame?.maxX, screenFrame: screen.frame,
-                pillWidth: pillWidth, gap: CGFloat(UserSettings.shared.safariDodgeGap))
+                pillWidth: pillWidth)
             targetOffset = centerX - screen.frame.midX
             // Vertically centre the pill on the URL field (nudged up by the
             // raise — the AX frame hugs the text, the visible container reads
@@ -469,7 +470,7 @@ final class NotchWindowController {
             // screen's top edge.
             if let field = dodge.urlFieldFrame {
                 let restingCenterY = screen.frame.maxY - NotchLayout.islandTopGap - viewModel.collapsedHeight / 2
-                targetYOffset = max(0, (restingCenterY - field.midY - CGFloat(UserSettings.shared.safariDodgeRaise)).rounded())
+                targetYOffset = max(0, (restingCenterY - field.midY - NotchLayout.safariDodgeRaise).rounded())
             } else {
                 targetYOffset = 0
             }
