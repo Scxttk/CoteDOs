@@ -101,7 +101,7 @@ final class NotchWindowController {
             let bounds = container.bounds
             // The island floats `islandTopGap` below the container's top edge.
             return NSRect(
-                x: (bounds.width - width) / 2,
+                x: (bounds.width - width) / 2 + self.currentIslandXShift(),
                 y: bounds.height - NotchLayout.islandTopGap - height,
                 width: width,
                 height: height
@@ -375,6 +375,17 @@ final class NotchWindowController {
         return (width, height)
     }
 
+    /// Horizontal shift of the collapsed pill off screen centre — the
+    /// controller-side mirror of `NotchRootView.islandXOffset`, so the hit and
+    /// hover rects track the asymmetric (hero-centred) pill. Zero whenever the
+    /// interactive footprint is the big expanded rect anyway (which contains
+    /// the shifted pill), and zero while an activity pill shows (it renders
+    /// centred).
+    private func currentIslandXShift() -> CGFloat {
+        guard !viewModel.occupiesExpandedFootprint, activities.current == nil else { return 0 }
+        return viewModel.collapsedTrailingShift(isPlaying: hasAudioHero, hasItems: !shelf.items.isEmpty, timerText: pomodoro.pillText)
+    }
+
     /// The actual clickable footprint in global screen coordinates — the same
     /// rect `NotchContainerView.hitTest` honors, without the extra hover
     /// tolerance `islandScreenRect` adds for open/close hysteresis. Used to
@@ -384,7 +395,7 @@ final class NotchWindowController {
         guard let screen = ScreenManager.targetScreen() else { return nil }
         let (width, height) = currentIslandSize()
         return NSRect(
-            x: screen.frame.midX - width / 2,
+            x: screen.frame.midX - width / 2 + currentIslandXShift(),
             y: screen.frame.maxY - NotchLayout.islandTopGap - height,
             width: width,
             height: height
@@ -429,7 +440,7 @@ final class NotchWindowController {
         // the screen edge and collapse the instant the cursor reaches it.
         let topBleed = NotchLayout.hoverTopBleed
         return NSRect(
-            x: screen.frame.midX - width / 2,
+            x: screen.frame.midX - width / 2 + (expanded ? 0 : currentIslandXShift()),
             y: screen.frame.maxY - NotchLayout.islandTopGap - height,
             width: width,
             height: height + NotchLayout.islandTopGap + topBleed

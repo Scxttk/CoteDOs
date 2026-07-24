@@ -84,6 +84,9 @@ final class IslandChoreographySheetTests: XCTestCase {
         let width: Double
         let height: Double
         let corner: Double
+        /// Horizontal shift of the island frame off screen centre (the
+        /// hero-centred asymmetric pill; 0 for symmetric stages).
+        let shift: Double
         /// nil = state set without `withAnimation` (the pill handover).
         let curve: (response: Double, damping: Double)?
         let label: String
@@ -94,6 +97,7 @@ final class IslandChoreographySheetTests: XCTestCase {
         let width: Double
         let height: Double
         let corner: Double
+        let shift: Double
         let stageLabel: String
     }
 
@@ -104,29 +108,35 @@ final class IslandChoreographySheetTests: XCTestCase {
     }
 
     private func geometry(
-        of state: NotchViewModel.IslandState, viewModel: NotchViewModel, hero: Bool
-    ) -> (width: Double, height: Double, corner: Double) {
-        let pillWidth = viewModel.collapsedWidth(isPlaying: hero, hasItems: false, timerText: nil)
+        of state: NotchViewModel.IslandState, viewModel: NotchViewModel, hero: Bool,
+        timerText: String? = nil
+    ) -> (width: Double, height: Double, corner: Double, shift: Double) {
+        let pillWidth = viewModel.collapsedWidth(isPlaying: hero, hasItems: false, timerText: timerText)
+        // Mirrors `NotchRootView.islandXOffset`: the pill stages sit shifted so
+        // the hero core stays on screen centre while the timer grows rightward.
+        let pillShift = viewModel.collapsedTrailingShift(isPlaying: hero, hasItems: false, timerText: timerText)
         let width: CGFloat
+        let shift: CGFloat
         switch state {
-        case .expanded:   width = viewModel.expandedWidth
-        case .band:       width = NotchLayout.bandWidth
-        case .solo:       width = hero ? pillWidth : viewModel.soloWidth(for: .music)
-        case .condensing: width = pillWidth
-        case .collapsed:  width = pillWidth
+        case .expanded:   width = viewModel.expandedWidth; shift = 0
+        case .band:       width = NotchLayout.bandWidth; shift = 0
+        case .solo:       width = hero ? pillWidth : viewModel.soloWidth(for: .music); shift = pillShift
+        case .condensing: width = pillWidth; shift = pillShift
+        case .collapsed:  width = pillWidth; shift = pillShift
         }
         let expanded = state == .expanded
         return (
             Double(width),
             Double(expanded ? viewModel.expandedHeight : viewModel.collapsedHeight),
-            Double(expanded ? NotchLayout.expandedCornerRadius : viewModel.collapsedHeight / 2)
+            Double(expanded ? NotchLayout.expandedCornerRadius : viewModel.collapsedHeight / 2),
+            Double(shift)
         )
     }
 
     /// Build the event list the controller would produce for a full staged
     /// walk in one direction — stage rest delays from `stageRestDelay`,
     /// per-hop animation choice from `advanceStaging`.
-    private func walkEvents(expanding: Bool, viewModel: NotchViewModel, hero: Bool) -> [StageEvent] {
+    private func walkEvents(expanding: Bool, viewModel: NotchViewModel, hero: Bool, timerText: String? = nil) -> [StageEvent] {
         let order: [NotchViewModel.IslandState] =
             [.collapsed, .condensing, .solo, .band, .expanded]
         let path = expanding ? Array(order.dropFirst()) : Array(order.dropLast().reversed())
@@ -134,7 +144,7 @@ final class IslandChoreographySheetTests: XCTestCase {
         var events: [StageEvent] = []
         var t = 0.0
         for state in path {
-            let geo = geometry(of: state, viewModel: viewModel, hero: hero)
+            let geo = geometry(of: state, viewModel: viewModel, hero: hero, timerText: timerText)
             let curve: (response: Double, damping: Double)?
             if state == .collapsed {
                 curve = nil  // handover: no withAnimation
@@ -145,36 +155,38 @@ final class IslandChoreographySheetTests: XCTestCase {
             }
             events.append(StageEvent(
                 time: t, state: state,
-                width: geo.width, height: geo.height, corner: geo.corner,
+                width: geo.width, height: geo.height, corner: geo.corner, shift: geo.shift,
                 curve: curve, label: "\(state)"
             ))
-            t += restDelay(entering: state, expanding: expanding, hero: hero)
+            t += restDelay(entering: state, expanding: expanding, hero: hero, timerText: timerText)
         }
         return events
     }
 
     /// Mirrors `NotchWindowController.stageRestDelay`, including the hero
     /// no-op stage skip.
-    private func restDelay(entering state: NotchViewModel.IslandState, expanding: Bool, hero: Bool) -> Double {
+    private func restDelay(entering state: NotchViewModel.IslandState, expanding: Bool, hero: Bool, timerText: String? = nil) -> Double {
+        let heroContent = hero || timerText != nil
         switch (state, expanding) {
         case (.band, false):       return NotchLayout.bandCollapseDelay
         case (.solo, false):       return NotchLayout.soloCollapseDelay
-        case (.condensing, false): return hero ? 0 : NotchLayout.condenseSwapDelay
-        case (.condensing, true):  return hero ? 0 : NotchLayout.condenseExpandDelay
-        case (.solo, true):        return hero ? 0 : NotchLayout.soloExpandDelay
+        case (.condensing, false): return heroContent ? 0 : NotchLayout.condenseSwapDelay
+        case (.condensing, true):  return heroContent ? 0 : NotchLayout.condenseExpandDelay
+        case (.solo, true):        return heroContent ? 0 : NotchLayout.soloExpandDelay
         case (.band, true):        return NotchLayout.bandExpandDelay
         default:                   return 0
         }
     }
 
-    private func simulate(name: String, expanding: Bool, viewModel: NotchViewModel, hero: Bool) -> Walk {
-        let events = walkEvents(expanding: expanding, viewModel: viewModel, hero: hero)
+    private func simulate(name: String, expanding: Bool, viewModel: NotchViewModel, hero: Bool, timerText: String? = nil) -> Walk {
+        let events = walkEvents(expanding: expanding, viewModel: viewModel, hero: hero, timerText: timerText)
         let start = geometry(
-            of: expanding ? .collapsed : .expanded, viewModel: viewModel, hero: hero)
+            of: expanding ? .collapsed : .expanded, viewModel: viewModel, hero: hero, timerText: timerText)
 
         var width = SpringTrack(at: start.width)
         var height = SpringTrack(at: start.height)
         var corner = SpringTrack(at: start.corner)
+        var shift = SpringTrack(at: start.shift)
 
         let dt = 1.0 / 240.0
         let tail = 0.8  // keep sampling past the last event so the settle shows
@@ -192,22 +204,25 @@ final class IslandChoreographySheetTests: XCTestCase {
                     width.retarget(e.width, response: curve.response, dampingFraction: curve.damping)
                     height.retarget(e.height, response: curve.response, dampingFraction: curve.damping)
                     corner.retarget(e.corner, response: curve.response, dampingFraction: curve.damping)
+                    shift.retarget(e.shift, response: curve.response, dampingFraction: curve.damping)
                 } else {
                     // No withAnimation: an unchanged value stays put, a changed
                     // one would snap — exactly what the code does at .collapsed.
                     if width.target != e.width { width.snap(to: e.width) }
                     if height.target != e.height { height.snap(to: e.height) }
                     if corner.target != e.corner { corner.snap(to: e.corner) }
+                    if shift.target != e.shift { shift.snap(to: e.shift) }
                 }
                 nextEvent += 1
             }
             frames.append(Frame(
                 time: t, width: width.value, height: height.value,
-                corner: corner.value, stageLabel: stageLabel
+                corner: corner.value, shift: shift.value, stageLabel: stageLabel
             ))
             width.step(dt)
             height.step(dt)
             corner.step(dt)
+            shift.step(dt)
             t += dt
         }
         return Walk(name: name, events: events, frames: frames)
@@ -338,9 +353,12 @@ final class IslandChoreographySheetTests: XCTestCase {
             }
             stroke(walk.frames.map { (x($0.time), yW($0.width)) }, color: .cyan)
             stroke(walk.frames.map { (x($0.time), yH($0.height)) }, color: .orange)
+            // The frame's horizontal shift off screen centre (hero-centred
+            // asymmetric pill), ×5 so the ~20 pt range registers on the plot.
+            stroke(walk.frames.map { (x($0.time), yW($0.shift * 5)) }, color: .pink)
 
             context.draw(
-                Text("\(walk.name)   —   width (cyan) / height (orange), stage markers dashed")
+                Text("\(walk.name)   —   width (cyan) / height (orange) / shift×5 (pink), stage markers dashed")
                     .font(.system(size: 11, weight: .semibold)).foregroundStyle(.white),
                 at: CGPoint(x: padL, y: 10), anchor: .leading
             )
@@ -636,5 +654,73 @@ final class IslandChoreographySheetTests: XCTestCase {
         try summary.write(
             to: Self.outputDirectory.appendingPathComponent("summary.txt"),
             atomically: true, encoding: .utf8)
+    }
+
+    /// Hero + timer: the asymmetric pill. The frame shifts right so the hero
+    /// core stays on screen centre while the timer hangs on to the right; the
+    /// shift must ride the same springs as the width (no snap at the pill
+    /// handover) and land exactly at the resting value.
+    func testHeroCoreStaysCentredWithTimer() throws {
+        try FileManager.default.createDirectory(at: Self.outputDirectory, withIntermediateDirectories: true)
+
+        let settings = UserSettings.shared
+        let originalOnly = settings.pillSpectrumOnly
+        let originalWidth = settings.pillSpectrumWidth
+        defer {
+            settings.pillSpectrumOnly = originalOnly
+            settings.pillSpectrumWidth = originalWidth
+        }
+        settings.pillSpectrumOnly = true
+        settings.pillSpectrumWidth = 74
+
+        let viewModel = NotchViewModel()
+        let timerText = "12:34"
+        let restingShift = Double(viewModel.collapsedTrailingShift(isPlaying: true, hasItems: false, timerText: timerText))
+        XCTAssertGreaterThan(restingShift, 0)
+
+        let expand = simulate(name: "expand-hero-timer", expanding: true, viewModel: viewModel, hero: true, timerText: timerText)
+        let collapse = simulate(name: "collapse-hero-timer", expanding: false, viewModel: viewModel, hero: true, timerText: timerText)
+        try write(plotView(for: expand), name: "plot-expand-hero-timer")
+        try write(plotView(for: collapse), name: "plot-collapse-hero-timer")
+
+        // The pill handover (.collapsed, no withAnimation) must be a shift
+        // no-op: .solo/.condensing/.collapsed all share the resting shift, so
+        // nothing snaps at the cut.
+        for walk in [expand, collapse] {
+            for event in walk.events where ["solo", "condensing", "collapsed"].contains(event.label) {
+                XCTAssertEqual(event.shift, restingShift, accuracy: 0.001,
+                    "\(walk.name): stage \(event.label) must rest at the asymmetric shift")
+            }
+            // The spring never leaves the [0, restingShift] corridor by more
+            // than a hair (the snappy expand hop has a whisper of bounce).
+            for frame in walk.frames {
+                XCTAssertGreaterThan(frame.shift, -1.5, "\(walk.name) t=\(frame.time): shift overshoot below centre")
+                XCTAssertLessThan(frame.shift, restingShift + 1.5, "\(walk.name) t=\(frame.time): shift overshoot past rest")
+            }
+        }
+
+        // Landed states: collapse ends with the hero core exactly centred
+        // (frame centre − trailing/2 == screen centre), expand ends symmetric.
+        let collapsedEnd = try XCTUnwrap(collapse.frames.last)
+        XCTAssertEqual(collapsedEnd.shift, restingShift, accuracy: 0.5,
+            "collapse must land at the asymmetric rest — hero core on screen centre")
+        let expandedEnd = try XCTUnwrap(expand.frames.last)
+        XCTAssertEqual(expandedEnd.shift, 0, accuracy: 0.5,
+            "expand must land back at the symmetric centre")
+
+        // Width and shift ride the same spring per hop, so their normalized
+        // progress must stay in lock-step during the solo→band leg of the
+        // expand (the one leg where both change): the capsule widens and
+        // re-centres as one gesture, not two.
+        let bandTime = expand.events.first { $0.state == .band }?.time ?? 0
+        let expandedTime = expand.events.first { $0.state == .expanded }?.time ?? 0
+        let pillWidth = Double(viewModel.collapsedWidth(isPlaying: true, hasItems: false, timerText: timerText))
+        let bandWidth = Double(NotchLayout.bandWidth)
+        for frame in expand.frames where frame.time > bandTime && frame.time < expandedTime {
+            let widthProgress = (frame.width - pillWidth) / (bandWidth - pillWidth)
+            let shiftProgress = (restingShift - frame.shift) / restingShift
+            XCTAssertEqual(widthProgress, shiftProgress, accuracy: 0.05,
+                "t=\(frame.time): width and shift diverged — the drift would read as a separate move")
+        }
     }
 }

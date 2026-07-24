@@ -169,6 +169,27 @@ final class NotchViewModel: ObservableObject {
         return core + 2 * (NotchLayout.collapsedContentPadding + NotchLayout.collapsedEndPadding)
     }
 
+    /// How far the collapsed capsule's *frame* shifts right of screen centre so
+    /// the audio hero core stays exactly centred while the trailing segments
+    /// (timer readout, shelf badge) grow to the right of it. Zero without the
+    /// hero: a timer-only or idle pill stays symmetric as before. The trailing
+    /// segments' centre sits `trailing/2` right of the frame centre, so
+    /// shifting the frame by that amount puts the hero core back on
+    /// `screen.midX`. Must stay in lock-step with `collapsedWidth` — both read
+    /// the very same `NotchLayout` constants, or the visible pill and the
+    /// hit/hover rects drift apart.
+    func collapsedTrailingShift(isPlaying: Bool, hasItems: Bool, timerText: String?) -> CGFloat {
+        guard isPlaying else { return 0 }
+        var trailing: CGFloat = 0
+        if let timerText {
+            trailing += NotchLayout.collapsedItemSpacing + Self.timerSegmentWidth(timerText)
+        }
+        if hasItems {
+            trailing += NotchLayout.collapsedItemSpacing + NotchLayout.collapsedBadgeWidth
+        }
+        return trailing / 2
+    }
+
     /// Estimated width of the pill's timer segment (icon + readout). Must stay
     /// in lock-step with the segment layout in `CollapsedView`.
     private static func timerSegmentWidth(_ text: String) -> CGFloat {

@@ -65,6 +65,24 @@ struct NotchRootView: View {
         viewModel.isExpanded ? viewModel.expandedHeight : viewModel.collapsedHeight
     }
 
+    /// Horizontal shift of the island *frame* off screen centre: with the audio
+    /// hero active, the hero core stays centred and the trailing segments
+    /// (timer, badge) grow rightward — so the whole capsule sits asymmetric by
+    /// half the trailing width. Mirrors the `islandWidth` switch: the pill hero
+    /// takes over from `.solo` on, so those stages already rest at the shifted
+    /// position; `.expanded`/`.band` and activity pills stay centred. The shift
+    /// changes inside the very same `withAnimation` transactions as the width,
+    /// so it rides the staged walk's tuned springs.
+    private var islandXOffset: CGFloat {
+        switch viewModel.islandState {
+        case .expanded, .band:
+            return 0
+        case .solo, .condensing, .collapsed:
+            if viewModel.islandState == .collapsed, activities.current != nil { return 0 }
+            return viewModel.collapsedTrailingShift(isPlaying: hasAudioHero, hasItems: !shelf.items.isEmpty, timerText: pomodoro.pillText)
+        }
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             Color.clear
@@ -137,11 +155,16 @@ struct NotchRootView: View {
                     .clipShape(shape)
             )
             .frame(width: islandWidth, height: islandHeight)
+            .offset(x: islandXOffset)
             // Settings changes alter the pill's width formula outside the
             // staged walk's withAnimation calls; morph instead of snapping.
             .animation(NotchLayout.islandMorphAnimation, value: settings.pillSpectrumOnly)
             .animation(NotchLayout.islandMorphAnimation, value: settings.pillSpectrumWidth)
             .animation(NotchLayout.islandMorphAnimation, value: settings.pillSpectrumBarCount)
+            // Timer start/stop and audio start/stop change width *and* offset
+            // at rest, outside the walk's withAnimation calls; slide, don't snap.
+            .animation(NotchLayout.islandMorphAnimation, value: pomodoro.pillText != nil)
+            .animation(NotchLayout.islandMorphAnimation, value: hasAudioHero)
     }
 
     @ViewBuilder private var content: some View {
