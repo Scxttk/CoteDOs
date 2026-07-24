@@ -30,6 +30,14 @@ final class NotchWindowController {
     private var hoverMonitorGlobal: Any?
     private var hoverMonitorLocal: Any?
     private let menuBarOverlapMonitor = MenuBarOverlapMonitor()
+    private let safariFullscreenMonitor = SafariFullscreenMonitor()
+    /// Last reported Safari-fullscreen state; applied (or ignored, when it
+    /// concerns another display) by `applySafariDodge`.
+    private var safariDodge: SafariFullscreenMonitor.DodgeState?
+    /// Horizontal offset of the whole *panel* off screen centre while dodging
+    /// Safari's URL bar. Additive to and independent of the SwiftUI island's
+    /// own hero-centring shift; every screen-rect helper must include it.
+    private var panelXOffset: CGFloat = 0
     /// All reasons the panel is currently hidden or passive. `panel.alphaValue`
     /// and `panel.ignoresMouseEvents` are derived from this via
     /// `applyPresence`/`updateClickThrough` — never written directly, so no
@@ -132,6 +140,16 @@ final class NotchWindowController {
         menuBarOverlapMonitor.notchLeftEdgeProvider = { [weak self] in self?.islandScreenRect(expanded: false)?.minX }
         menuBarOverlapMonitor.onChange = { [weak self] overlapping in self?.setMenuBarOverlap(overlapping) }
         menuBarOverlapMonitor.start()
+
+        // No explicit precedence between the two monitors is needed: a dodged
+        // pill sits far right of the menu-bar items, and the overlap monitor
+        // reads the pill's real (shifted) left edge via the provider above, so
+        // it reports no overlap while the dodge is active.
+        safariFullscreenMonitor.onChange = { [weak self] state in
+            self?.safariDodge = state
+            self?.applySafariDodge()
+        }
+        safariFullscreenMonitor.start()
 
         // Remote control for visual verification: lets a screen-recording
         // session drive the *staged* hover walk without a cursor (the capture
@@ -264,6 +282,7 @@ final class NotchWindowController {
             NSEvent.removeMonitor(hoverMonitorLocal)
         }
         menuBarOverlapMonitor.stop()
+        safariFullscreenMonitor.stop()
     }
 
     func show() {
@@ -312,6 +331,7 @@ final class NotchWindowController {
             self.hoverMonitorLocal = nil
         }
         menuBarOverlapMonitor.stop()
+        safariFullscreenMonitor.stop()
         collapseWorkItem?.cancel()
         // Don't strand the island mid-walk over a sleep: finish the remaining
         // stages immediately (no animation — the screen is going dark anyway).
@@ -334,6 +354,7 @@ final class NotchWindowController {
         installScrollMonitor()
         installHoverMonitor()
         menuBarOverlapMonitor.start()
+        safariFullscreenMonitor.start()
         reposition()
         // Waking with the music long stopped: hide right away, don't wait for
         // the first mouse move.
@@ -351,6 +372,12 @@ final class NotchWindowController {
         // Hotkey from anywhere, including the idle-hidden state: un-hide first
         // or the island would open at alpha 0.
         policy.hideReasons.remove(.idle)
+        // Dodged beside Safari's URL bar: snap back to centre for typing; the
+        // collapse landing re-applies the dodge (see `advanceStaging`).
+        if panelXOffset != 0, let screen = currentScreen {
+            panelXOffset = 0
+            panel.setFrame(panelFrame(on: screen), display: true)
+        }
         viewModel.selectedTab = .capture
         // Open directly (not through the staged reveal) so the field is ready
         // to type into immediately.
@@ -367,17 +394,68 @@ final class NotchWindowController {
     func reposition() {
         guard let screen = ScreenManager.targetScreen() else { return }
         currentScreen = screen
+        panel.setFrame(panelFrame(on: screen), display: true)
+        // The screen may have changed under a dodge (cursor crossed displays,
+        // topology changed) — re-derive whether the dodge still applies here.
+        applySafariDodge()
+    }
+
+    private func panelFrame(on screen: NSScreen) -> NSRect {
         let width = viewModel.panelWidth
         let height = viewModel.panelHeight
-        panel.setFrame(
-            NSRect(
-                x: screen.frame.midX - width / 2,
-                y: screen.frame.maxY - height,
-                width: width,
-                height: height
-            ),
-            display: true
+        return NSRect(
+            x: screen.frame.midX - width / 2 + panelXOffset,
+            y: screen.frame.maxY - height,
+            width: width,
+            height: height
         )
+    }
+
+    // MARK: - Safari fullscreen dodge
+
+    /// True while the pill is dodged beside Safari's URL bar (visible but
+    /// click-through; hover and gestures suppressed).
+    private var isSafariDodged: Bool { policy.passiveReasons.contains(.safariFullscreen) }
+
+    /// Apply (or lift) the Safari-fullscreen dodge for the panel's current
+    /// screen. Entering force-closes an open island (same pattern as the
+    /// menu-bar overlap) and slides the panel right of the URL field; leaving
+    /// slides it back to centre. While the capture hotkey holds the island
+    /// open, application is deferred to the collapse landing — the island must
+    /// not jump mid-typing.
+    private func applySafariDodge() {
+        guard !captureHotkeyActive else { return }
+        let targetOffset: CGFloat
+        let active: Bool
+        if let dodge = safariDodge, let screen = currentScreen, dodge.screen === screen {
+            let pillWidth = viewModel.collapsedWidth(isPlaying: hasAudioHero, hasItems: !shelf.items.isEmpty, timerText: pomodoro.pillText)
+            let centerX = SafariFullscreenMonitor.dodgePillCenterX(
+                urlFieldMaxX: dodge.urlFieldMaxX, screenFrame: screen.frame, pillWidth: pillWidth)
+            targetOffset = centerX - screen.frame.midX
+            active = true
+        } else {
+            targetOffset = 0
+            active = false
+        }
+
+        if active, !isSafariDodged {
+            stageWorkItem?.cancel(); stageWorkItem = nil
+            stagingTarget = nil
+            collapseWorkItem?.cancel()
+            viewModel.islandState = .collapsed
+            policy.passiveReasons.insert(.safariFullscreen)
+        } else if !active, isSafariDodged {
+            policy.passiveReasons.remove(.safariFullscreen)
+        }
+
+        if panelXOffset != targetOffset, let screen = currentScreen {
+            panelXOffset = targetOffset
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = NotchLayout.idleHideFadeDuration
+                panel.animator().setFrame(panelFrame(on: screen), display: true)
+            }
+        }
+        applyPresence(animated: false)
     }
 
     /// Move the panel to the screen the cursor is on if it has changed. Only
@@ -462,7 +540,7 @@ final class NotchWindowController {
         guard let screen = ScreenManager.targetScreen() else { return nil }
         let (width, height) = currentIslandSize()
         return NSRect(
-            x: screen.frame.midX - width / 2 + currentIslandXShift(),
+            x: screen.frame.midX - width / 2 + currentIslandXShift() + panelXOffset,
             y: screen.frame.maxY - NotchLayout.islandTopGap - height,
             width: width,
             height: height
@@ -519,7 +597,7 @@ final class NotchWindowController {
         // the screen edge and collapse the instant the cursor reaches it.
         let topBleed = NotchLayout.hoverTopBleed
         return NSRect(
-            x: screen.frame.midX - width / 2 + (expanded ? 0 : currentIslandXShift()),
+            x: screen.frame.midX - width / 2 + (expanded ? 0 : currentIslandXShift()) + panelXOffset,
             y: screen.frame.maxY - NotchLayout.islandTopGap - height,
             width: width,
             height: height + NotchLayout.islandTopGap + topBleed
@@ -556,6 +634,12 @@ final class NotchWindowController {
         lastEvaluatedCursor = cursor
         followCursorScreenIfNeeded()
         updateClickThrough(isDrag: isDrag)
+
+        // While dodged beside Safari's fullscreen URL bar the pill is
+        // deliberately passive: an expanded island there would sit on top of
+        // the toolbar and re-introduce exactly the interference the dodge
+        // removes. The capture hotkey remains the deliberate escape hatch.
+        if isSafariDodged { return }
 
         // Mid-drag, only the click-through gate matters (so the panel becomes
         // a valid drag destination). Hover expand/collapse must not run: a
@@ -641,7 +725,7 @@ final class NotchWindowController {
     // MARK: - File drag
 
     private func handleDragEntered() {
-        guard !menuBarOverlapActive else { return }
+        guard !menuBarOverlapActive, !isSafariDodged else { return }
         collapseWorkItem?.cancel()
         suppressHover = false
         // A drag reaching the hidden notch un-hides it — snap, the expand walk
@@ -745,7 +829,7 @@ final class NotchWindowController {
     /// expanded-notch footprint (the "big notch" boundary), where the local monitor
     /// can't see the event because hit-testing lets it fall through.
     private func handleBigNotchRegionScroll(_ event: NSEvent) {
-        guard !menuBarOverlapActive, !viewModel.isExpanded else { return }
+        guard !menuBarOverlapActive, !isSafariDodged, !viewModel.isExpanded else { return }
         let dy = event.scrollingDeltaY
         guard dy > 0, abs(dy) > NotchLayout.gestureScrollThreshold, abs(dy) > abs(event.scrollingDeltaX) else { return }
         guard let rect = islandScreenRect(expanded: true), rect.contains(NSEvent.mouseLocation) else { return }
@@ -856,8 +940,10 @@ final class NotchWindowController {
         guard next != target else {
             stagingTarget = nil; stageWorkItem = nil
             if next == .collapsed {
-                // The collapse has landed: with nothing to show and the cursor
-                // away, fade the pill out entirely.
+                // The collapse has landed: re-apply a deferred Safari dodge
+                // (a capture recentred the panel), then — with nothing to show
+                // and the cursor away — fade the pill out entirely.
+                applySafariDodge()
                 refreshIdlePresence()
             }
             if next == .expanded {

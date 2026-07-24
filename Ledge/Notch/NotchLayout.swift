@@ -230,6 +230,16 @@ enum NotchLayout {
     static let panelHorizontalMargin: CGFloat = 60
     static var panelVerticalMargin: CGFloat { 24 + islandTopGap }
 
+    // MARK: Safari fullscreen dodge
+
+    /// Gap between Safari's URL/search field and the dodged pill's left edge.
+    static let safariDodgeGap: CGFloat = 12
+    /// Fallback offset right of screen centre when the URL field couldn't be
+    /// resolved via AX — far enough to clear a centred unified toolbar field.
+    static let safariDodgeFallbackOffset: CGFloat = 300
+    /// Minimum clearance the dodged pill keeps from the screen's right edge.
+    static let safariDodgeEdgeMargin: CGFloat = 16
+
     // MARK: Hover detection
 
     /// Extra tolerance around the visible collapsed pill before hover counts
