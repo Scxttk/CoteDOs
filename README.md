@@ -20,16 +20,20 @@
 <p align="center">
   <img src="assets/notch-collapsed.png" width="300" alt="Côte d'OS collapsed to a floating pill">
   <br>
-  <sub>Idle, it's a pill next to the menu bar. Hover, and it opens up.</sub>
+  <sub>Playing, it's a pill. Idle, it's nothing at all — move the cursor up there and it fades in.</sub>
 </p>
 
 I got tired of Apple's volume HUD punching a gray box into the middle of my screen every time I hit F11, so I built something to replace it. Then I kept adding to it — now-playing controls, a file shelf, a couple of things I use daily and one I use maybe once a week. It's a menu-bar app, no Dock icon, and it draws its own notch even on Macs that don't have a physical one.
 
 Some of this is opinionated because I built it for myself first: the UI is in German, and the quick-capture feature assumes you're running Obsidian with daily notes. If neither applies to you, the media controls and file shelf still work fine without them.
 
+The name is a pun on Côte d'Or, and it's the third one — NotchMate was generic, Ledge somehow worse. This one stays. The coastline at the top of your OS.
+
 ## What it actually does
 
 **Volume and brightness keys land in the notch instead of Apple's OSD.** This is the reason I open the app at all — a CGEvent tap grabs the hardware keys, CoreAudio handles the volume change directly, and Apple's overlay never shows up. Needs Accessibility permission.
+
+**And it knows when to disappear.** With nothing playing and no timer running, the notch isn't a pill — it's gone, invisible and click-through. Move the cursor into the area it would occupy and the pill fades in; hover it (or swipe down with two fingers) and it opens. When Safari goes fullscreen its URL bar slides up right under the pill, so the pill gets out of the way: it moves next to the address field (found via the Accessibility API; if that lookup ever breaks, the fallback is a dumb fixed offset) and stops intercepting clicks until you leave fullscreen. Other browsers don't get this treatment yet because I don't use them fullscreen.
 
 Beyond that:
 
@@ -37,7 +41,7 @@ Beyond that:
 - A live audio spectrum in the pill and the music tab, fed by a CoreAudio system tap — real frequencies, not a canned animation. Five color styles, including one that quantises each bar onto the album cover's own palette, and a spectrum-only mode that drops the mini cover for a bigger wave — bar count and pill width are yours to set, up to 32 bars (one per analyzer band) across 140pt.
 - A file shelf. Drag files onto the notch, drag them off later, wherever "later" ends up being. Tracked by bookmark, not path, so a rename or a reboot doesn't lose them.
 - Obsidian quick capture: ⌥⌘Space, type, and it's appended under a heading in today's daily note without Obsidian needing to be open. Point it at your vault in Settings first.
-- A pomodoro timer with named presets and auto-chaining, because I kept starting one in a phone app and then closing the phone app.
+- A pomodoro timer with named presets and auto-chaining, because I kept starting one in a phone app and then closing the phone app. Its readout docks onto the right side of the pill while music plays — the spectrum stays exactly centered under the notch and the pill grows asymmetrically to the right instead of shoving everything sideways.
 - Small live-activity banners for charging, AirPods connecting, a file landing in the shelf — a few seconds, then gone.
 - A Claude tab that shows my usage limits and shifts the desktop app's model and effort like a gearbox. This is the one I use maybe once a week.
 
