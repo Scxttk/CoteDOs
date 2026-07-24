@@ -176,6 +176,23 @@ private struct FeatureSettings: View {
                 .disabled(!settings.hudEnabled)
 
             Section {
+                LabeledContent(String(localized: "settings.dodge.gap", defaultValue: "Abstand zur Suchleiste")) {
+                    Slider(value: $settings.safariDodgeGap, in: 0...160, step: 2)
+                    Text("\(Int(settings.safariDodgeGap)) pt").monospacedDigit().frame(width: 48, alignment: .trailing)
+                }
+                LabeledContent(String(localized: "settings.dodge.raise", defaultValue: "Höhen-Versatz")) {
+                    Slider(value: $settings.safariDodgeRaise, in: -15...30, step: 1)
+                    Text("\(Int(settings.safariDodgeRaise)) pt").monospacedDigit().frame(width: 48, alignment: .trailing)
+                }
+            } header: {
+                Text(String(localized: "settings.dodge.header", defaultValue: "Safari-Vollbild"))
+            } footer: {
+                Text(String(localized: "settings.dodge.hint", defaultValue: "Position der Pill neben der Suchleiste, wenn Safari im Vollbild läuft. Wirkt sofort — am besten bei laufendem Vollbild auf einem zweiten Display justieren."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 ForEach(NotchViewModel.Tab.allCases, id: \.self) { tab in
                     Toggle(tab.title, isOn: tabBinding(tab))
                         // The last enabled tab can't be switched off — the

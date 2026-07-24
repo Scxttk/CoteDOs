@@ -46,7 +46,7 @@ final class SafariFullscreenMonitor {
     /// How deep below the toolbar to search for the URL text field. Safari
     /// nests the field a few groups down; the cap keeps a changed hierarchy
     /// from turning into a full-tree walk.
-    private static let toolbarSearchDepth = 5
+    private static let toolbarSearchDepth = 8
 
     func start() {
         let center = NSWorkspace.shared.notificationCenter
@@ -83,15 +83,31 @@ final class SafariFullscreenMonitor {
         onChange?(state)
     }
 
+    /// Plain-file diagnostics (`/tmp/cotedos-dodge.log`): written only while
+    /// Safari is frontmost, so a failing guard is visible without the unified
+    /// log's redaction. Cheap enough to stay on — one line per second at most.
+    private func dlog(_ message: String) {
+        let line = "\(Date()) \(message)\n"
+        let path = "/tmp/cotedos-dodge.log"
+        guard let data = line.data(using: .utf8) else { return }
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try? handle.close()
+        } else {
+            try? data.write(to: URL(fileURLWithPath: path))
+        }
+    }
+
     // MARK: Positioning
 
     /// Where the dodged pill's centre belongs: just right of the URL field
     /// (or a generic offset right of centre when AX couldn't resolve it),
     /// clamped so the pill keeps clear of the screen's right edge.
-    static func dodgePillCenterX(urlFieldMaxX: CGFloat?, screenFrame: NSRect, pillWidth: CGFloat) -> CGFloat {
+    static func dodgePillCenterX(urlFieldMaxX: CGFloat?, screenFrame: NSRect, pillWidth: CGFloat, gap: CGFloat = NotchLayout.safariDodgeGap) -> CGFloat {
         let centerX: CGFloat
         if let urlFieldMaxX {
-            centerX = urlFieldMaxX + NotchLayout.safariDodgeGap + pillWidth / 2
+            centerX = urlFieldMaxX + gap + pillWidth / 2
         } else {
             centerX = screenFrame.midX + NotchLayout.safariDodgeFallbackOffset
         }
@@ -101,26 +117,43 @@ final class SafariFullscreenMonitor {
     // MARK: AX plumbing
 
     private func computeDodgeState() -> DodgeState? {
-        guard MediaKeyTap.hasAccessibilityPermission(prompt: false) else { return nil }
         guard let app = NSWorkspace.shared.frontmostApplication,
               app.bundleIdentifier == Self.safariBundleID
         else { return nil }
+        guard MediaKeyTap.hasAccessibilityPermission(prompt: false) else {
+            dlog("no accessibility permission")
+            return nil
+        }
 
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
-        guard let window = elementAttribute(of: axApp, kAXFocusedWindowAttribute) else { return nil }
+        guard let window = elementAttribute(of: axApp, kAXFocusedWindowAttribute) else {
+            dlog("no focused window via AX")
+            return nil
+        }
 
         var fullscreenValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(window, "AXFullScreen" as CFString, &fullscreenValue) == .success,
-              let fullscreen = fullscreenValue as? Bool, fullscreen
-        else { return nil }
+        let fullscreenResult = AXUIElementCopyAttributeValue(window, "AXFullScreen" as CFString, &fullscreenValue)
+        guard fullscreenResult == .success, let fullscreen = fullscreenValue as? Bool else {
+            dlog("AXFullScreen unreadable (result \(fullscreenResult.rawValue))")
+            return nil
+        }
+        guard fullscreen else {
+            dlog("safari frontmost, not fullscreen")
+            return nil
+        }
 
-        guard let windowFrame = frame(of: window),
-              let screen = screenContaining(axRect: windowFrame)
-        else { return nil }
+        guard let windowFrame = frame(of: window) else {
+            dlog("window frame unreadable")
+            return nil
+        }
+        guard let screen = screenContaining(axRect: windowFrame) else {
+            dlog("no screen for window frame \(windowFrame)")
+            return nil
+        }
+        dlog("fullscreen on screen \(screen.frame)")
 
         var urlFieldFrame: NSRect?
-        if let toolbar = childWithRole(kAXToolbarRole as String, of: window),
-           let field = descendantWithRole("AXTextField", of: toolbar, depth: Self.toolbarSearchDepth),
+        if let field = urlField(in: window),
            let fieldFrame = frame(of: field),
            let primary = NSScreen.screens.first {
             // AX X coordinates share the axis with `NSScreen.frame`; Y is
@@ -134,6 +167,7 @@ final class SafariFullscreenMonitor {
                 height: fieldFrame.height.rounded()
             )
         }
+        dlog(urlFieldFrame.map { "url field \($0)" } ?? "url field not found, fallback position")
         return DodgeState(screen: screen, urlFieldFrame: urlFieldFrame)
     }
 
@@ -176,19 +210,30 @@ final class SafariFullscreenMonitor {
         return value as? String
     }
 
-    private func childWithRole(_ role: String, of element: AXUIElement) -> AXUIElement? {
-        children(of: element).first { self.role(of: $0) == role }
-    }
-
-    /// Depth-limited breadth-first search — Safari's toolbar nests the address
-    /// field inside a couple of groups whose exact shape churns between
-    /// versions, so match by role only.
-    private func descendantWithRole(_ role: String, of element: AXUIElement, depth: Int) -> AXUIElement? {
-        var frontier = children(of: element)
-        var remaining = depth
+    /// Safari's unified address/search field: the first `AXTextField` found by
+    /// a depth-limited breadth-first walk of the *window* — not just of a
+    /// top-level `AXToolbar` child, because in fullscreen the toolbar sits a
+    /// few groups down and its position churns between Safari versions.
+    /// Content subtrees (web area, sidebar, tab strip) are pruned so a text
+    /// field on the page itself can never win.
+    private func urlField(in window: AXUIElement) -> AXUIElement? {
+        var frontier = [window]
+        var remaining = Self.toolbarSearchDepth
         while !frontier.isEmpty, remaining > 0 {
-            if let match = frontier.first(where: { self.role(of: $0) == role }) { return match }
-            frontier = frontier.flatMap { children(of: $0) }
+            var next: [AXUIElement] = []
+            for element in frontier {
+                for child in children(of: element) {
+                    switch role(of: child) {
+                    case "AXTextField":
+                        return child
+                    case "AXWebArea", "AXScrollArea", "AXTabGroup":
+                        continue
+                    default:
+                        next.append(child)
+                    }
+                }
+            }
+            frontier = next
             remaining -= 1
         }
         return nil

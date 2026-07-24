@@ -233,7 +233,10 @@ enum NotchLayout {
     // MARK: Safari fullscreen dodge
 
     /// Gap between Safari's URL/search field and the dodged pill's left edge.
-    static let safariDodgeGap: CGFloat = 20
+    static let safariDodgeGap: CGFloat = 36
+    /// How far above the URL field's vertical centre the dodged pill sits —
+    /// the AX frame hugs the text, the visible container reads higher.
+    static let safariDodgeRaise: CGFloat = 5
     /// Fallback offset right of screen centre when the URL field couldn't be
     /// resolved via AX — far enough to clear a centred unified toolbar field.
     static let safariDodgeFallbackOffset: CGFloat = 300

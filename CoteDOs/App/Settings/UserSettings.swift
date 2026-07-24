@@ -143,6 +143,9 @@ final class UserSettings: ObservableObject {
         static let pillSpectrumOnly = "pillSpectrumOnly"
         static let pillSpectrumBarCount = "pillSpectrumBarCount"
         static let pillSpectrumWidth = "pillSpectrumWidth"
+        // Safari fullscreen dodge
+        static let safariDodgeGap = "safariDodgeGap"
+        static let safariDodgeRaise = "safariDodgeRaise"
         // Obsidian Quick Capture
         static let vaultBookmark = "obsidianVaultBookmark"
         static let vaultName = "obsidianVaultName"
@@ -226,6 +229,16 @@ final class UserSettings: ObservableObject {
     }
     @Published var pillSpectrumWidth: Double {
         didSet { defaults.set(pillSpectrumWidth, forKey: Key.pillSpectrumWidth) }
+    }
+    /// Safari-fullscreen dodge geometry, user-tunable: how far right of the
+    /// URL field's edge the pill sits, and how far above the field's vertical
+    /// centre (the AX frame hugs the text; the visible container reads
+    /// higher). Applied live by `NotchWindowController.applySafariDodge`.
+    @Published var safariDodgeGap: Double {
+        didSet { defaults.set(safariDodgeGap, forKey: Key.safariDodgeGap) }
+    }
+    @Published var safariDodgeRaise: Double {
+        didSet { defaults.set(safariDodgeRaise, forKey: Key.safariDodgeRaise) }
     }
     @Published var spectrumColorSource: SpectrumColorSource {
         didSet { defaults.set(spectrumColorSource.rawValue, forKey: Key.spectrumColorSource) }
@@ -368,6 +381,8 @@ final class UserSettings: ObservableObject {
             Key.pillSpectrumOnly: false,
             Key.pillSpectrumBarCount: 16,
             Key.pillSpectrumWidth: 48.0,
+            Key.safariDodgeGap: 36.0,
+            Key.safariDodgeRaise: 5.0,
         ])
         self.mediaSource = MediaSource(rawValue: defaults.string(forKey: Key.mediaSource) ?? "") ?? .auto
         self.appearance = Appearance(rawValue: defaults.string(forKey: Key.appearance) ?? "") ?? .system
@@ -383,6 +398,8 @@ final class UserSettings: ObservableObject {
         self.pillSpectrumOnly = defaults.bool(forKey: Key.pillSpectrumOnly)
         self.pillSpectrumBarCount = max(6, min(32, defaults.integer(forKey: Key.pillSpectrumBarCount)))
         self.pillSpectrumWidth = max(36, min(140, defaults.double(forKey: Key.pillSpectrumWidth)))
+        self.safariDodgeGap = max(0, min(200, defaults.double(forKey: Key.safariDodgeGap)))
+        self.safariDodgeRaise = max(-15, min(30, defaults.double(forKey: Key.safariDodgeRaise)))
         self.spectrumColorA = Self.decodeColor(defaults.data(forKey: Key.spectrumColorA)) ?? .cyan
         self.spectrumColorB = Self.decodeColor(defaults.data(forKey: Key.spectrumColorB)) ?? .purple
         self.vaultBookmark = defaults.data(forKey: Key.vaultBookmark)

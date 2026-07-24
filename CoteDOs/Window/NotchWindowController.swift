@@ -175,6 +175,18 @@ final class NotchWindowController {
                 self.startDebugRecording()
                 return
             }
+            if let command = note.object as? String, command.hasPrefix("offset:"),
+               let value = Double(command.dropFirst("offset:".count)) {
+                // Photo mode: drop the island a fixed distance below the top
+                // edge so screenshots can show it with headroom. Debug-only;
+                // "offset:0" restores reality. The next Safari-dodge change
+                // overwrites it, which is fine for a staged shot.
+                self.panelYOffset = CGFloat(value)
+                if let screen = self.currentScreen {
+                    self.panel.setFrame(self.panelFrame(on: screen), display: true)
+                }
+                return
+            }
             if note.object as? String == "geometry" {
                 // Arm the TabIcon frame reporter for 4 s, then dump to
                 // /tmp/ledge-geometry.txt (see `DebugGeometry`).
@@ -208,6 +220,13 @@ final class NotchWindowController {
         Publishers.MergeMany(contentChanged)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.refreshIdlePresence() }
+            .store(in: &cancellables)
+
+        // The dodge sliders in Settings act live: any settings change
+        // re-derives the dodge position (a no-op while not dodging).
+        UserSettings.shared.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.applySafariDodge() }
             .store(in: &cancellables)
     }
 
@@ -433,16 +452,24 @@ final class NotchWindowController {
         let targetOffset: CGFloat
         let targetYOffset: CGFloat
         let active: Bool
+        if let dodge = safariDodge, let screen = currentScreen, dodge.screen !== screen {
+            // NSScreen identity is the suspect to rule out if the dodge ever
+            // fails silently on a single display.
+            NSLog("CoteDOs: dodge reported for other screen (dodge \(dodge.screen.frame) vs current \(screen.frame))")
+        }
         if let dodge = safariDodge, let screen = currentScreen, dodge.screen === screen {
             let pillWidth = viewModel.collapsedWidth(isPlaying: hasAudioHero, hasItems: !shelf.items.isEmpty, timerText: pomodoro.pillText)
             let centerX = SafariFullscreenMonitor.dodgePillCenterX(
-                urlFieldMaxX: dodge.urlFieldFrame?.maxX, screenFrame: screen.frame, pillWidth: pillWidth)
+                urlFieldMaxX: dodge.urlFieldFrame?.maxX, screenFrame: screen.frame,
+                pillWidth: pillWidth, gap: CGFloat(UserSettings.shared.safariDodgeGap))
             targetOffset = centerX - screen.frame.midX
-            // Vertically centre the pill on the URL field so it nestles
-            // beside the toolbar instead of hugging the screen's top edge.
+            // Vertically centre the pill on the URL field (nudged up by the
+            // raise — the AX frame hugs the text, the visible container reads
+            // higher) so it nestles beside the toolbar instead of hugging the
+            // screen's top edge.
             if let field = dodge.urlFieldFrame {
                 let restingCenterY = screen.frame.maxY - NotchLayout.islandTopGap - viewModel.collapsedHeight / 2
-                targetYOffset = max(0, (restingCenterY - field.midY).rounded())
+                targetYOffset = max(0, (restingCenterY - field.midY - CGFloat(UserSettings.shared.safariDodgeRaise)).rounded())
             } else {
                 targetYOffset = 0
             }
