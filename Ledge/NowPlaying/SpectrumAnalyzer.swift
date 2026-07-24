@@ -183,7 +183,7 @@ final class SpectrumAnalyzer: ObservableObject {
             kAudioSubTapDriftCompensationKey: true,
         ]
         let aggDescription: [String: Any] = [
-            kAudioAggregateDeviceNameKey: "Ledge Spectrum",
+            kAudioAggregateDeviceNameKey: "Côte d'OS Spectrum",
             kAudioAggregateDeviceUIDKey: aggUID,
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceTapListKey: [sub],

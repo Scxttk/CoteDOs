@@ -1,7 +1,32 @@
 # Changelog
 
-All notable changes to Ledge (the app formerly presenting itself as NotchMate —
-the bundle still is, see the README for why).
+All notable changes to Côte d'OS (formerly Ledge, formerly NotchMate — the
+bundle identifier still is NotchMate, see the README for why).
+
+## [Unreleased]
+
+### Added
+- **Idle means invisible.** With nothing to show — no music, no timer, no live
+  activity — the pill hides entirely. Moving the cursor into the area the
+  expanded notch would occupy reveals the collapsed pill; hovering the pill
+  (or the two-finger swipe) opens it as usual, and it fades away again when
+  the cursor leaves. As a side effect, clicking "through" the hidden notch
+  can no longer steal focus in the idle case: an invisible panel is now
+  unconditionally click-through.
+- **Safari-fullscreen dodge.** When Safari runs fullscreen, its URL bar moves
+  up under the pill. The pill now slides to the right of the address field
+  (located via Accessibility, with a generic fallback) and goes
+  click-through for the duration; leaving fullscreen slides it back. Hover
+  is suppressed while dodged — the capture hotkey stays the escape hatch.
+
+### Changed
+- The app presents itself as **Côte d'OS** now. Display name, menu, settings
+  window and the audio-tap device are renamed; the product (`Ledge.app`), the
+  bundle identifier and the data folders deliberately stay put so
+  permissions, settings and shelf data survive.
+- With music playing and a focus timer running, the spectrum no longer gets
+  pushed off-centre: the audio hero stays exactly under the notch and the
+  timer (and shelf badge) grow rightward instead.
 
 ## [1.3.0] – 2026-07-21
 

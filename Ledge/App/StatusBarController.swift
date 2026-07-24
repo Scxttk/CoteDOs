@@ -12,7 +12,7 @@ final class StatusBarController: NSObject {
         if let button = statusItem.button {
             button.image = NSImage(
                 systemSymbolName: "rectangle.topthird.inset.filled",
-                accessibilityDescription: "Ledge"
+                accessibilityDescription: "Côte d'OS"
             )
         }
 
@@ -40,7 +40,7 @@ final class StatusBarController: NSObject {
         menu.addItem(.separator())
 
         menu.addItem(NSMenuItem(
-            title: String(localized: "menu.quit", defaultValue: "Ledge beenden"),
+            title: String(localized: "menu.quit", defaultValue: "Côte d'OS beenden"),
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         ))
@@ -58,7 +58,7 @@ final class StatusBarController: NSObject {
                 sender.state = .on
             }
         } catch {
-            NSLog("Ledge: launch-at-login toggle failed: \(error)")
+            NSLog("CoteDOs: launch-at-login toggle failed: \(error)")
         }
     }
 

@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="Ledge/Assets.xcassets/AppIcon.appiconset/icon_256.png" width="128" alt="Ledge icon">
+  <img src="Ledge/Assets.xcassets/AppIcon.appiconset/icon_256.png" width="128" alt="Côte d'OS icon">
 </p>
 
-<h1 align="center">Ledge</h1>
+<h1 align="center">Côte d'OS</h1>
 
 <p align="center">Your Mac's notch, doing something other than hiding a camera.</p>
 
@@ -14,11 +14,11 @@
 </p>
 
 <p align="center">
-  <img src="assets/notch-expanded.png" width="620" alt="Ledge expanded into now-playing controls">
+  <img src="assets/notch-expanded.png" width="620" alt="Côte d'OS expanded into now-playing controls">
 </p>
 
 <p align="center">
-  <img src="assets/notch-collapsed.png" width="300" alt="Ledge collapsed to a floating pill">
+  <img src="assets/notch-collapsed.png" width="300" alt="Côte d'OS collapsed to a floating pill">
   <br>
   <sub>Idle, it's a pill next to the menu bar. Hover, and it opens up.</sub>
 </p>
@@ -45,7 +45,7 @@ Every tab can be switched off in Settings if you only came for some of this.
 
 ## Getting it running
 
-Grab `Ledge-x.y.z.zip` from the [latest release](../../releases/latest), unzip it, drag `Ledge.app` into `/Applications`.
+Grab `Ledge-x.y.z.zip` from the [latest release](../../releases/latest), unzip it, drag `Ledge.app` into `/Applications`. (Yes, the file is still called `Ledge.app` — the app *presents* as Côte d'OS, but the product name, bundle identifier and data folders deliberately keep their old names so permissions and settings survive. Names on disk are plumbing; the notch is the facade.)
 
 (If you're updating from a release whose app was still called `NotchMate.app`: delete the old one, and expect macOS to ask for the Automation and Accessibility permissions again — the grant follows the app. Your settings survive; the bundle identifier deliberately stayed the same under the hood.)
 

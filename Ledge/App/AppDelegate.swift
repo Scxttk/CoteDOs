@@ -144,13 +144,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pomodoro.clear()
     }
 
-    /// Register Ledge as a login item so it starts automatically at every login.
+    /// Register Côte d'OS as a login item so it starts automatically at every login.
     private func enableLaunchAtLogin() {
         guard SMAppService.mainApp.status != .enabled else { return }
         do {
             try SMAppService.mainApp.register()
         } catch {
-            NSLog("Ledge: could not enable launch at login: \(error)")
+            NSLog("CoteDOs: could not enable launch at login: \(error)")
         }
     }
 }
