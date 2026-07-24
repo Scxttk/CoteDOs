@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 final class NotchWindowController {
@@ -42,6 +43,11 @@ final class NotchWindowController {
     /// interactive regardless of where the cursor is (see
     /// `PanelPresencePolicy.ignoresMouseEvents`). Cleared on any collapse.
     private var captureHotkeyActive = false
+    /// Subscriptions that drive `refreshIdlePresence`: the pill's contents are
+    /// published state the controller otherwise only reads lazily inside event
+    /// handlers, but hiding on idle needs a push the moment music stops or a
+    /// timer ends — the cursor may not move for minutes.
+    private var cancellables: Set<AnyCancellable> = []
 
     /// Logs the live hover evaluation to a plain file when set (debugging only).
     /// A file is used instead of NSLog because modern macOS redacts dynamic
@@ -156,8 +162,62 @@ final class NotchWindowController {
             }
             self.suppressHover = false
             self.collapseWorkItem?.cancel()
+            if note.object as? String == "expand" {
+                // The recorder drives the walk without a cursor — an idle-hidden
+                // panel must un-hide first or it animates at alpha 0.
+                self.policy.hideReasons.remove(.idle)
+                self.applyPresence(animated: false)
+            }
             self.setExpanded(note.object as? String == "expand")
         }
+
+        // Idle-hide reactivity: whatever can change the pill's contents (or
+        // land the island back at rest) re-evaluates the idle presence. The
+        // async main hop matters — @Published emits on willSet, so evaluating
+        // synchronously would read the *old* property values.
+        let contentChanged: [AnyPublisher<Void, Never>] = [
+            nowPlaying.$isPlaying.map { _ in }.eraseToAnyPublisher(),
+            spectrum.$hasSignal.map { _ in }.eraseToAnyPublisher(),
+            pomodoro.$pillText.map { _ in }.eraseToAnyPublisher(),
+            activities.$current.map { _ in }.eraseToAnyPublisher(),
+            shelf.$isDropTargeted.map { _ in }.eraseToAnyPublisher(),
+            viewModel.$islandState.map { _ in }.eraseToAnyPublisher(),
+        ]
+        Publishers.MergeMany(contentChanged)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.refreshIdlePresence() }
+            .store(in: &cancellables)
+    }
+
+    // MARK: - Idle presence
+
+    /// Whether the collapsed pill has anything to show. Deliberately *not*
+    /// including a non-empty shelf: files alone don't keep the pill on screen
+    /// (they stay reachable via the proximity reveal); the badge shows
+    /// whenever audio or a timer makes the pill visible anyway. Live
+    /// activities count — an AirPods route pill can fire while otherwise idle.
+    private var hasCollapsedContent: Bool {
+        hasAudioHero || pomodoro.pillText != nil || activities.current != nil
+    }
+
+    /// Idle = fully invisible: with nothing to show and the cursor away, the
+    /// pill hides entirely. Proximity (the *expanded* island footprint) is the
+    /// first of two stages: entering it merely reveals the collapsed pill;
+    /// expanding still requires hovering the pill itself or the swipe gesture,
+    /// exactly as with a content-bearing pill.
+    private func refreshIdlePresence(animated: Bool = true) {
+        let cursorNearby = islandScreenRect(expanded: true)?.contains(NSEvent.mouseLocation) ?? false
+        let idle = viewModel.islandState == .collapsed
+            && stagingTarget == nil
+            && !hasCollapsedContent
+            && !shelf.isDropTargeted
+            && !cursorNearby
+        if idle {
+            policy.hideReasons.insert(.idle)
+        } else {
+            policy.hideReasons.remove(.idle)
+        }
+        applyPresence(animated: animated)
     }
 
     /// Captures ~1.5 s of the container view at 60 fps into memory, then
@@ -209,7 +269,8 @@ final class NotchWindowController {
     func show() {
         reposition()
         panel.orderFrontRegardless()
-        applyPresence(animated: false)
+        // Idle at launch means hidden from the very first frame.
+        refreshIdlePresence(animated: false)
     }
 
     /// Push the policy's verdict onto the panel: alpha (fading when animated)
@@ -274,6 +335,9 @@ final class NotchWindowController {
         installHoverMonitor()
         menuBarOverlapMonitor.start()
         reposition()
+        // Waking with the music long stopped: hide right away, don't wait for
+        // the first mouse move.
+        refreshIdlePresence(animated: false)
     }
 
     // MARK: - Quick Capture
@@ -284,6 +348,9 @@ final class NotchWindowController {
     func presentCapture() {
         suppressHover = false
         collapseWorkItem?.cancel()
+        // Hotkey from anywhere, including the idle-hidden state: un-hide first
+        // or the island would open at alpha 0.
+        policy.hideReasons.remove(.idle)
         viewModel.selectedTab = .capture
         // Open directly (not through the staged reveal) so the field is ready
         // to type into immediately.
@@ -408,8 +475,20 @@ final class NotchWindowController {
     /// space around a collapsed pill would still make the panel (and app) key
     /// — `NotchContainerView.hitTest` only stops the *content* from reacting,
     /// it doesn't stop AppKit's window-level activation on mouse-down.
-    private func updateClickThrough() {
+    private func updateClickThrough(isDrag: Bool = false) {
         let cursor = NSEvent.mouseLocation
+        // A file drag approaching the *idle-hidden* notch: the pill is
+        // invisible and pill-sized — an impossible drop target. Open the gate
+        // across the whole expanded footprint instead, so AppKit's drag-
+        // destination routing can find the container view at all;
+        // `handleDragEntered` then un-hides and expands. Only the lone `.idle`
+        // reason gets this — a menu-bar-overlap hide stays inert, and a
+        // visible pill keeps its exact rect-gated behaviour.
+        if isDrag, policy.hideReasons == [.idle],
+           let zone = islandScreenRect(expanded: true), zone.contains(cursor) {
+            panel.ignoresMouseEvents = false
+            return
+        }
         let inside = interactiveScreenRect()?.contains(cursor) ?? false
         panel.ignoresMouseEvents = policy.ignoresMouseEvents(
             cursorInsideInteractiveRect: inside,
@@ -476,7 +555,7 @@ final class NotchWindowController {
         }
         lastEvaluatedCursor = cursor
         followCursorScreenIfNeeded()
-        updateClickThrough()
+        updateClickThrough(isDrag: isDrag)
 
         // Mid-drag, only the click-through gate matters (so the panel becomes
         // a valid drag destination). Hover expand/collapse must not run: a
@@ -533,6 +612,15 @@ final class NotchWindowController {
                 }
             }
         } else {
+            // Stage one of the idle reveal: with nothing to show, the pill's
+            // *presence* follows proximity to the expanded footprint — enter
+            // and the collapsed pill fades in, leave and it fades back out.
+            // Expanding (stage two) still needs the pill-rect hover below or
+            // the swipe gesture, same as a content-bearing pill.
+            if !hasCollapsedContent && !shelf.isDropTargeted {
+                refreshIdlePresence()
+            }
+            guard !policy.isHidden else { return }
             guard let rect = islandScreenRect(expanded: false) else { return }
             let inside = rect.contains(cursor)
             if debugHoverLogging {
@@ -556,6 +644,10 @@ final class NotchWindowController {
         guard !menuBarOverlapActive else { return }
         collapseWorkItem?.cancel()
         suppressHover = false
+        // A drag reaching the hidden notch un-hides it — snap, the expand walk
+        // is about to move anyway.
+        policy.hideReasons.remove(.idle)
+        applyPresence(animated: false)
         viewModel.selectedTab = .files
         shelf.isDropTargeted = true
         if !viewModel.isExpanded {
@@ -664,6 +756,10 @@ final class NotchWindowController {
         suppressHover = false
         collapseWorkItem?.cancel()
         guard !viewModel.isExpanded else { return }
+        // A swipe can arrive while the pill is still idle-hidden (the reveal
+        // and the gesture race on the same mouse position) — un-hide first.
+        policy.hideReasons.remove(.idle)
+        applyPresence(animated: false)
         setExpanded(true)
     }
 
@@ -759,6 +855,11 @@ final class NotchWindowController {
 
         guard next != target else {
             stagingTarget = nil; stageWorkItem = nil
+            if next == .collapsed {
+                // The collapse has landed: with nothing to show and the cursor
+                // away, fade the pill out entirely.
+                refreshIdlePresence()
+            }
             if next == .expanded {
                 // The walk has landed: let the final spring's fast phase play
                 // out on the empty island, then mount the page carousel into
