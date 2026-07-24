@@ -252,6 +252,9 @@ enum NotchLayout {
 
     // MARK: Timing & animation
 
+    /// Fade duration when the whole panel hides or reappears (idle hide, and
+    /// any other `PanelPresencePolicy` transition that may animate).
+    static let idleHideFadeDuration: TimeInterval = 0.25
     /// Delay before collapsing after a drag exits, so brief exits don't flicker.
     static let collapseDelay: TimeInterval = 0.12
     /// Grace period before the island force-closes after the cursor leaves

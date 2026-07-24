@@ -29,10 +29,19 @@ final class NotchWindowController {
     private var hoverMonitorGlobal: Any?
     private var hoverMonitorLocal: Any?
     private let menuBarOverlapMonitor = MenuBarOverlapMonitor()
+    /// All reasons the panel is currently hidden or passive. `panel.alphaValue`
+    /// and `panel.ignoresMouseEvents` are derived from this via
+    /// `applyPresence`/`updateClickThrough` — never written directly, so no
+    /// feature's restore path can stomp another's hide.
+    private var policy = PanelPresencePolicy()
     /// True while the frontmost app's menu bar overlaps the notch pill — the
     /// panel is hidden and non-interactive for the duration (see
     /// `setMenuBarOverlap`).
-    private var menuBarOverlapActive = false
+    private var menuBarOverlapActive: Bool { policy.hideReasons.contains(.menuBarOverlap) }
+    /// True while the capture hotkey holds the island open: the panel must be
+    /// interactive regardless of where the cursor is (see
+    /// `PanelPresencePolicy.ignoresMouseEvents`). Cleared on any collapse.
+    private var captureHotkeyActive = false
 
     /// Logs the live hover evaluation to a plain file when set (debugging only).
     /// A file is used instead of NSLog because modern macOS redacts dynamic
@@ -200,6 +209,23 @@ final class NotchWindowController {
     func show() {
         reposition()
         panel.orderFrontRegardless()
+        applyPresence(animated: false)
+    }
+
+    /// Push the policy's verdict onto the panel: alpha (fading when animated)
+    /// plus the click-through gate. The only place `panel.alphaValue` is set.
+    private func applyPresence(animated: Bool) {
+        let targetAlpha: CGFloat = policy.isHidden ? 0 : 1
+        if panel.alphaValue != targetAlpha {
+            if animated {
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = NotchLayout.idleHideFadeDuration
+                    panel.animator().alphaValue = targetAlpha
+                }
+            } else {
+                panel.alphaValue = targetAlpha
+            }
+        }
         updateClickThrough()
     }
 
@@ -234,6 +260,7 @@ final class NotchWindowController {
         switch viewModel.islandState {
         case .band, .solo, .condensing:
             viewModel.islandState = .collapsed
+            captureHotkeyActive = false
         case .expanded, .collapsed:
             break
         }
@@ -264,7 +291,8 @@ final class NotchWindowController {
         // Hotkey-driven, not cursor-driven: force interactive regardless of
         // where the cursor happens to be, or the field could be unclickable
         // until the mouse moves over it.
-        panel.ignoresMouseEvents = false
+        captureHotkeyActive = true
+        applyPresence(animated: false)
         panel.makeKeyAndOrderFront(nil)
         viewModel.requestCaptureFocus()
     }
@@ -370,10 +398,12 @@ final class NotchWindowController {
     /// — `NotchContainerView.hitTest` only stops the *content* from reacting,
     /// it doesn't stop AppKit's window-level activation on mouse-down.
     private func updateClickThrough() {
-        guard !menuBarOverlapActive else { return }  // setMenuBarOverlap already forces this
         let cursor = NSEvent.mouseLocation
         let inside = interactiveScreenRect()?.contains(cursor) ?? false
-        panel.ignoresMouseEvents = !inside
+        panel.ignoresMouseEvents = policy.ignoresMouseEvents(
+            cursorInsideInteractiveRect: inside,
+            hotkeyOverride: captureHotkeyActive
+        )
     }
 
     /// The visible island rect in global screen coordinates (origin bottom-left),
@@ -412,18 +442,19 @@ final class NotchWindowController {
     /// the menu bar it just started overlapping.
     private func setMenuBarOverlap(_ active: Bool) {
         guard menuBarOverlapActive != active else { return }
-        menuBarOverlapActive = active
         if active {
             stageWorkItem?.cancel(); stageWorkItem = nil
             stagingTarget = nil
             collapseWorkItem?.cancel()
+            captureHotkeyActive = false
             viewModel.islandState = .collapsed
-            panel.alphaValue = 0
-            panel.ignoresMouseEvents = true
+            policy.hideReasons.insert(.menuBarOverlap)
         } else {
-            panel.alphaValue = 1
-            panel.ignoresMouseEvents = false
+            // Only this reason is lifted — any other hide reason (e.g. idle)
+            // stays in force instead of being blanket-restored away.
+            policy.hideReasons.remove(.menuBarOverlap)
         }
+        applyPresence(animated: false)
     }
 
     private func evaluateHover(isDrag: Bool = false) {
@@ -647,6 +678,9 @@ final class NotchWindowController {
     /// hotkey wants the field open now, not after the staged reveal).
     private func setExpanded(_ expanded: Bool, staged: Bool = true) {
         let target: NotchViewModel.IslandState = expanded ? .expanded : .collapsed
+        // Any collapse ends the hotkey's "interactive regardless of cursor"
+        // override; the next updateClickThrough re-derives the gate normally.
+        if !expanded { captureHotkeyActive = false }
 
         guard viewModel.islandState != target else {
             // Already there — make sure no stale walk keeps running.
