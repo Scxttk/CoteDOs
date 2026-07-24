@@ -10,42 +10,69 @@ struct SettingsView: View {
             GeneralSettings(settings: settings)
                 .tabItem { Label(String(localized: "settings.general", defaultValue: "Allgemein"), systemImage: "gearshape") }
 
-            NowPlayingSettings(settings: settings)
-                .tabItem { Label(String(localized: "settings.nowPlaying", defaultValue: "Now Playing"), systemImage: "music.note") }
+            NotchSettings(settings: settings)
+                .tabItem { Label(String(localized: "settings.notch", defaultValue: "Notch"), systemImage: "sparkles") }
 
-            FeatureSettings(settings: settings)
-                .tabItem { Label(String(localized: "settings.features", defaultValue: "Features"), systemImage: "sparkles") }
+            NowPlayingSettings(settings: settings)
+                .tabItem { Label(String(localized: "settings.nowPlaying", defaultValue: "Musik"), systemImage: "music.note") }
 
             TimerSettings(settings: settings)
                 .tabItem { Label(String(localized: "settings.timer", defaultValue: "Timer"), systemImage: "timer") }
 
             ObsidianSettings(settings: settings)
                 .tabItem { Label(String(localized: "settings.obsidian", defaultValue: "Obsidian"), systemImage: "square.and.pencil") }
-
-            DataSettings()
-                .tabItem { Label(String(localized: "settings.data", defaultValue: "Daten"), systemImage: "externaldrive") }
         }
-        .frame(width: 460, height: 360)
+        .frame(width: 520, height: 480)
     }
 }
 
 private struct GeneralSettings: View {
     @ObservedObject var settings: UserSettings
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var didReset = false
+
+    private var versionString: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        return "\(version) (\(build))"
+    }
 
     var body: some View {
         Form {
-            Toggle(String(localized: "settings.launchAtLogin", defaultValue: "Bei Anmeldung starten"), isOn: $launchAtLogin)
-                .onChange(of: launchAtLogin) { _, enabled in
-                    setLaunchAtLogin(enabled)
-                }
+            Section {
+                Toggle(String(localized: "settings.launchAtLogin", defaultValue: "Bei Anmeldung starten"), isOn: $launchAtLogin)
+                    .onChange(of: launchAtLogin) { _, enabled in
+                        setLaunchAtLogin(enabled)
+                    }
 
-            Picker(String(localized: "settings.appearance", defaultValue: "Erscheinungsbild"), selection: $settings.appearance) {
-                ForEach(UserSettings.Appearance.allCases) { option in
-                    Text(option.localizedName).tag(option)
+                Picker(String(localized: "settings.appearance", defaultValue: "Erscheinungsbild"), selection: $settings.appearance) {
+                    ForEach(UserSettings.Appearance.allCases) { option in
+                        Text(option.localizedName).tag(option)
+                    }
                 }
+                .onChange(of: settings.appearance) { _, value in applyAppearance(value) }
             }
-            .onChange(of: settings.appearance) { _, value in applyAppearance(value) }
+
+            Section {
+                Button(role: .destructive) {
+                    Persistence.resetAll()
+                    NotificationCenter.default.post(name: .notchMateResetData, object: nil)
+                    didReset = true
+                } label: {
+                    Label(String(localized: "settings.resetData", defaultValue: "Ablage, Favoriten & Cache zurücksetzen"), systemImage: "trash")
+                }
+                if didReset {
+                    Text("settings.resetData.done")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text(String(localized: "settings.data", defaultValue: "Daten"))
+            } footer: {
+                LabeledContent("Côte d'OS", value: versionString)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .padding()
@@ -99,6 +126,10 @@ private struct NowPlayingSettings: View {
                 .disabled(!settings.pillSpectrumOnly)
                 LabeledContent(String(localized: "settings.spectrum.pillWidth", defaultValue: "Breite")) {
                     Slider(value: $settings.pillSpectrumWidth, in: 36...140, step: 2)
+                    Text("\(Int(settings.pillSpectrumWidth)) pt")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, alignment: .trailing)
                 }
                 .disabled(!settings.pillSpectrumOnly)
                 Picker(String(localized: "settings.spectrum.style", defaultValue: "Spektrum-Stil"), selection: $settings.spectrumStyle) {
@@ -141,9 +172,17 @@ private struct NowPlayingSettings: View {
                 }
                 LabeledContent(String(localized: "settings.cover.saturation", defaultValue: "Sättigung")) {
                     Slider(value: $settings.coverBarSaturation, in: 0.5...1.4)
+                    Text(settings.coverBarSaturation, format: .percent.precision(.fractionLength(0)))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, alignment: .trailing)
                 }
                 LabeledContent(String(localized: "settings.cover.brightness", defaultValue: "Helligkeit")) {
                     Slider(value: $settings.coverBarBrightness, in: 0.5...1.2)
+                    Text(settings.coverBarBrightness, format: .percent.precision(.fractionLength(0)))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, alignment: .trailing)
                 }
                 Button(String(localized: "settings.cover.reset", defaultValue: "Zurücksetzen")) {
                     settings.coverPaletteSize = 4
@@ -165,16 +204,11 @@ private struct NowPlayingSettings: View {
     }
 }
 
-private struct FeatureSettings: View {
+private struct NotchSettings: View {
     @ObservedObject var settings: UserSettings
 
     var body: some View {
         Form {
-            Toggle(String(localized: "settings.liveActivities", defaultValue: "Live Activities"), isOn: $settings.liveActivitiesEnabled)
-            Toggle(String(localized: "settings.hud", defaultValue: "HUD-Ersatz (Lautstärke/Helligkeit)"), isOn: $settings.hudEnabled)
-            Toggle(String(localized: "settings.suppressOSD", defaultValue: "Lautstärke & Helligkeit nur in der Notch (Bedienungshilfen nötig)"), isOn: $settings.suppressSystemOSD)
-                .disabled(!settings.hudEnabled)
-
             Section {
                 ForEach(NotchViewModel.Tab.allCases, id: \.self) { tab in
                     Toggle(tab.title, isOn: tabBinding(tab))
@@ -188,6 +222,15 @@ private struct FeatureSettings: View {
                 Text(String(localized: "settings.tabs.hint", defaultValue: "Deaktivierte Tabs verschwinden aus der Notch. Mindestens ein Tab bleibt immer aktiv."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle(String(localized: "settings.liveActivities", defaultValue: "Live Activities (Laden, AirPods, Datei empfangen)"), isOn: $settings.liveActivitiesEnabled)
+                Toggle(String(localized: "settings.hud", defaultValue: "HUD-Ersatz (Lautstärke/Helligkeit)"), isOn: $settings.hudEnabled)
+                Toggle(String(localized: "settings.suppressOSD", defaultValue: "Lautstärke & Helligkeit nur in der Notch (Bedienungshilfen nötig)"), isOn: $settings.suppressSystemOSD)
+                    .disabled(!settings.hudEnabled)
+            } header: {
+                Text(String(localized: "settings.notch.display", defaultValue: "Anzeige"))
             }
         }
         .formStyle(.grouped)
@@ -328,25 +371,3 @@ private struct ObsidianSettings: View {
     }
 }
 
-private struct DataSettings: View {
-    @State private var didReset = false
-
-    var body: some View {
-        Form {
-            Button(role: .destructive) {
-                Persistence.resetAll()
-                NotificationCenter.default.post(name: .notchMateResetData, object: nil)
-                didReset = true
-            } label: {
-                Label(String(localized: "settings.resetData", defaultValue: "Ablage, Favoriten & Cache zurücksetzen"), systemImage: "trash")
-            }
-            if didReset {
-                Text("settings.resetData.done")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
-        .padding()
-    }
-}
