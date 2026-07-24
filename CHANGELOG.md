@@ -156,8 +156,8 @@ First release: now-playing controls in the notch, file shelf with drag & drop,
 Obsidian quick capture, live activities (battery, audio routes), and a
 volume/brightness HUD that replaces Apple's gray OSD.
 
-[1.3.0]: https://github.com/Scxttk/Ledge/compare/v1.2.1...v1.3.0
-[1.2.1]: https://github.com/Scxttk/Ledge/compare/v1.2.0...v1.2.1
-[1.2.0]: https://github.com/Scxttk/Ledge/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/Scxttk/Ledge/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/Scxttk/Ledge/releases/tag/v1.0.0
+[1.3.0]: https://github.com/Scxttk/CoteDOs/compare/v1.2.1...v1.3.0
+[1.2.1]: https://github.com/Scxttk/CoteDOs/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/Scxttk/CoteDOs/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/Scxttk/CoteDOs/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/Scxttk/CoteDOs/releases/tag/v1.0.0
