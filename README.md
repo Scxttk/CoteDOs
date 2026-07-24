@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Ledge/Assets.xcassets/AppIcon.appiconset/icon_256.png" width="128" alt="Côte d'OS icon">
+  <img src="CoteDOs/Assets.xcassets/AppIcon.appiconset/icon_256.png" width="128" alt="Côte d'OS icon">
 </p>
 
 <h1 align="center">Côte d'OS</h1>
@@ -45,14 +45,14 @@ Every tab can be switched off in Settings if you only came for some of this.
 
 ## Getting it running
 
-Grab `Ledge-x.y.z.zip` from the [latest release](../../releases/latest), unzip it, drag `Ledge.app` into `/Applications`. (Yes, the file is still called `Ledge.app` — the app *presents* as Côte d'OS, but the product name, bundle identifier and data folders deliberately keep their old names so permissions and settings survive. Names on disk are plumbing; the notch is the facade.)
+Grab the zip from the [latest release](../../releases/latest), unzip it, drag `CoteDOs.app` into `/Applications`. (The file name skips the accents; the app presents itself as Côte d'OS. The bundle identifier and data folders still carry the app's previous names under the hood so settings and shelf data survive — plumbing, not facade.)
 
-(If you're updating from a release whose app was still called `NotchMate.app`: delete the old one, and expect macOS to ask for the Automation and Accessibility permissions again — the grant follows the app. Your settings survive; the bundle identifier deliberately stayed the same under the hood.)
+(If you're updating from a release whose app was called `Ledge.app` or `NotchMate.app`: delete the old one, and expect macOS to ask for the Automation and Accessibility permissions again — the grant follows the app. Your settings survive; the bundle identifier deliberately stayed the same under the hood.)
 
 Gatekeeper will block the first launch — it's ad-hoc signed, since I'm not paying Apple 99 €/year to notarize a menu-bar toy. Either:
 
 ```sh
-xattr -d com.apple.quarantine /Applications/Ledge.app
+xattr -d com.apple.quarantine /Applications/CoteDOs.app
 ```
 
 or let it fail once, then *System Settings → Privacy & Security → Open Anyway*.
@@ -64,10 +64,10 @@ One thing that's bitten me more than once: the Accessibility grant is tied to th
 ## Building it yourself
 
 ```sh
-xcodebuild -project Ledge.xcodeproj -scheme Ledge -configuration Debug build
+xcodebuild -project CoteDOs.xcodeproj -scheme CoteDOs -configuration Debug build
 ```
 
-Or `open Ledge.xcodeproj` and hit ⌘R in Xcode 15+. No SPM, no CocoaPods — everything is a system framework, so there's nothing to fetch first.
+Or `open CoteDOs.xcodeproj` and hit ⌘R in Xcode 15+. No SPM, no CocoaPods — everything is a system framework, so there's nothing to fetch first.
 
 Two things worth knowing before you dig into the source: brightness control resolves the private `DisplayServices` framework at runtime via `dlopen`, so if Apple ever pulls those symbols the feature quietly turns itself off and the regular brightness keys take back over — that's the bargain you make with private APIs, and I'm fine with it. The app also isn't sandboxed; half of what it does (Apple Events to Spotify, raw CoreAudio, the CGEvent tap) isn't possible inside one.
 

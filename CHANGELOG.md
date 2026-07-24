@@ -20,10 +20,12 @@ bundle identifier still is NotchMate, see the README for why).
   is suppressed while dodged — the capture hotkey stays the escape hatch.
 
 ### Changed
-- The app presents itself as **Côte d'OS** now. Display name, menu, settings
-  window and the audio-tap device are renamed; the product (`Ledge.app`), the
-  bundle identifier and the data folders deliberately stay put so
-  permissions, settings and shelf data survive.
+- The app is **Côte d'OS** now — display name, menu, settings window, the
+  audio-tap device, and the product itself: the bundle is `CoteDOs.app`
+  (project, targets and module follow suit). Only the bundle identifier and
+  the data folders deliberately stay on their old names so settings and
+  shelf data survive; expect macOS to ask for Automation and Accessibility
+  again, the grants follow the app.
 - With music playing and a focus timer running, the spectrum no longer gets
   pushed off-centre: the audio hero stays exactly under the notch and the
   timer (and shelf badge) grow rightward instead.
