@@ -38,6 +38,10 @@ final class NotchWindowController {
     /// Safari's URL bar. Additive to and independent of the SwiftUI island's
     /// own hero-centring shift; every screen-rect helper must include it.
     private var panelXOffset: CGFloat = 0
+    /// Downward offset of the panel while dodged: the pill drops from the top
+    /// edge to sit vertically centred on Safari's URL field, nestling beside
+    /// the toolbar rather than floating above it. Zero when not dodging.
+    private var panelYOffset: CGFloat = 0
     /// All reasons the panel is currently hidden or passive. `panel.alphaValue`
     /// and `panel.ignoresMouseEvents` are derived from this via
     /// `applyPresence`/`updateClickThrough` — never written directly, so no
@@ -374,8 +378,9 @@ final class NotchWindowController {
         policy.hideReasons.remove(.idle)
         // Dodged beside Safari's URL bar: snap back to centre for typing; the
         // collapse landing re-applies the dodge (see `advanceStaging`).
-        if panelXOffset != 0, let screen = currentScreen {
+        if panelXOffset != 0 || panelYOffset != 0, let screen = currentScreen {
             panelXOffset = 0
+            panelYOffset = 0
             panel.setFrame(panelFrame(on: screen), display: true)
         }
         viewModel.selectedTab = .capture
@@ -405,7 +410,7 @@ final class NotchWindowController {
         let height = viewModel.panelHeight
         return NSRect(
             x: screen.frame.midX - width / 2 + panelXOffset,
-            y: screen.frame.maxY - height,
+            y: screen.frame.maxY - height - panelYOffset,
             width: width,
             height: height
         )
@@ -426,15 +431,25 @@ final class NotchWindowController {
     private func applySafariDodge() {
         guard !captureHotkeyActive else { return }
         let targetOffset: CGFloat
+        let targetYOffset: CGFloat
         let active: Bool
         if let dodge = safariDodge, let screen = currentScreen, dodge.screen === screen {
             let pillWidth = viewModel.collapsedWidth(isPlaying: hasAudioHero, hasItems: !shelf.items.isEmpty, timerText: pomodoro.pillText)
             let centerX = SafariFullscreenMonitor.dodgePillCenterX(
-                urlFieldMaxX: dodge.urlFieldMaxX, screenFrame: screen.frame, pillWidth: pillWidth)
+                urlFieldMaxX: dodge.urlFieldFrame?.maxX, screenFrame: screen.frame, pillWidth: pillWidth)
             targetOffset = centerX - screen.frame.midX
+            // Vertically centre the pill on the URL field so it nestles
+            // beside the toolbar instead of hugging the screen's top edge.
+            if let field = dodge.urlFieldFrame {
+                let restingCenterY = screen.frame.maxY - NotchLayout.islandTopGap - viewModel.collapsedHeight / 2
+                targetYOffset = max(0, (restingCenterY - field.midY).rounded())
+            } else {
+                targetYOffset = 0
+            }
             active = true
         } else {
             targetOffset = 0
+            targetYOffset = 0
             active = false
         }
 
@@ -448,8 +463,9 @@ final class NotchWindowController {
             policy.passiveReasons.remove(.safariFullscreen)
         }
 
-        if panelXOffset != targetOffset, let screen = currentScreen {
+        if panelXOffset != targetOffset || panelYOffset != targetYOffset, let screen = currentScreen {
             panelXOffset = targetOffset
+            panelYOffset = targetYOffset
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = NotchLayout.idleHideFadeDuration
                 panel.animator().setFrame(panelFrame(on: screen), display: true)
@@ -541,7 +557,7 @@ final class NotchWindowController {
         let (width, height) = currentIslandSize()
         return NSRect(
             x: screen.frame.midX - width / 2 + currentIslandXShift() + panelXOffset,
-            y: screen.frame.maxY - NotchLayout.islandTopGap - height,
+            y: screen.frame.maxY - NotchLayout.islandTopGap - height - panelYOffset,
             width: width,
             height: height
         )
@@ -598,7 +614,7 @@ final class NotchWindowController {
         let topBleed = NotchLayout.hoverTopBleed
         return NSRect(
             x: screen.frame.midX - width / 2 + (expanded ? 0 : currentIslandXShift()) + panelXOffset,
-            y: screen.frame.maxY - NotchLayout.islandTopGap - height,
+            y: screen.frame.maxY - NotchLayout.islandTopGap - height - panelYOffset,
             width: width,
             height: height + NotchLayout.islandTopGap + topBleed
         )

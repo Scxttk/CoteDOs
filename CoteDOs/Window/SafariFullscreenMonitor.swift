@@ -16,15 +16,19 @@ import ApplicationServices
 /// heuristic would have).
 final class SafariFullscreenMonitor {
 
-    /// Safari is fullscreen on `screen`; `urlFieldMaxX` is the right edge of
-    /// its address/search field in `NSScreen.frame` coordinates, or nil when
-    /// the toolbar couldn't be resolved (dodge to a generic fallback then).
+    /// Safari is fullscreen on `screen`; `urlFieldFrame` is the frame of its
+    /// address/search field in `NSScreen.frame` coordinates (Cocoa,
+    /// origin bottom-left), or nil when the toolbar couldn't be resolved
+    /// (dodge to a generic fallback then). The full frame — not just the
+    /// right edge — because the dodged pill aligns vertically with the
+    /// field's centre, nestling beside the toolbar instead of hugging the
+    /// screen's top edge above it.
     struct DodgeState: Equatable {
         let screen: NSScreen
-        let urlFieldMaxX: CGFloat?
+        let urlFieldFrame: NSRect?
 
         static func == (lhs: DodgeState, rhs: DodgeState) -> Bool {
-            lhs.screen === rhs.screen && lhs.urlFieldMaxX == rhs.urlFieldMaxX
+            lhs.screen === rhs.screen && lhs.urlFieldFrame == rhs.urlFieldFrame
         }
     }
 
@@ -114,16 +118,23 @@ final class SafariFullscreenMonitor {
               let screen = screenContaining(axRect: windowFrame)
         else { return nil }
 
-        var urlFieldMaxX: CGFloat?
+        var urlFieldFrame: NSRect?
         if let toolbar = childWithRole(kAXToolbarRole as String, of: window),
            let field = descendantWithRole("AXTextField", of: toolbar, depth: Self.toolbarSearchDepth),
-           let fieldFrame = frame(of: field) {
-            // AX X coordinates share the axis with `NSScreen.frame`; only Y is
-            // flipped (and irrelevant here). Rounded so per-poll sub-pixel
-            // jitter doesn't churn the dodge state every second.
-            urlFieldMaxX = (fieldFrame.maxX).rounded()
+           let fieldFrame = frame(of: field),
+           let primary = NSScreen.screens.first {
+            // AX X coordinates share the axis with `NSScreen.frame`; Y is
+            // flipped (AX origin top-left of the primary screen, Y down).
+            // Rounded so per-poll sub-pixel jitter doesn't churn the dodge
+            // state every second.
+            urlFieldFrame = NSRect(
+                x: fieldFrame.origin.x.rounded(),
+                y: (primary.frame.maxY - fieldFrame.maxY).rounded(),
+                width: fieldFrame.width.rounded(),
+                height: fieldFrame.height.rounded()
+            )
         }
-        return DodgeState(screen: screen, urlFieldMaxX: urlFieldMaxX)
+        return DodgeState(screen: screen, urlFieldFrame: urlFieldFrame)
     }
 
     /// Convert an AX rect (origin top-left of the primary screen, Y down) far
