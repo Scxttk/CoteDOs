@@ -3,7 +3,10 @@
 All notable changes to Côte d'OS (formerly Ledge, formerly NotchMate — the
 bundle identifier still is NotchMate, see the README for why).
 
-## [Unreleased]
+## [1.4.0] – 2026-07-24
+
+The identity release: the app knows what it's called now, and when to
+get out of the way.
 
 ### Added
 - **Idle means invisible.** With nothing to show — no music, no timer, no live
@@ -29,6 +32,13 @@ bundle identifier still is NotchMate, see the README for why).
 - With music playing and a focus timer running, the spectrum no longer gets
   pushed off-centre: the audio hero stays exactly under the notch and the
   timer (and shelf badge) grow rightward instead.
+- The dodged pill's position was dialed in live (temporary sliders, then
+  baked in): 70 pt right of the URL field, 8 pt above its centre line.
+- The Settings window was rebalanced into five tabs — the near-empty Daten
+  tab folded into Allgemein (with a version footer), the Features grab bag
+  became Notch, and the window grew so nothing scrolls.
+- CI builds the renamed project again (the workflow still pointed at
+  `Ledge.xcodeproj` and failed on every push since the rename).
 
 ## [1.3.0] – 2026-07-21
 
@@ -158,6 +168,7 @@ First release: now-playing controls in the notch, file shelf with drag & drop,
 Obsidian quick capture, live activities (battery, audio routes), and a
 volume/brightness HUD that replaces Apple's gray OSD.
 
+[1.4.0]: https://github.com/Scxttk/CoteDOs/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/Scxttk/CoteDOs/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/Scxttk/CoteDOs/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/Scxttk/CoteDOs/compare/v1.1.0...v1.2.0
