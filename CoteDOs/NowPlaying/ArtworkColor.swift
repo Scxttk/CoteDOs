@@ -34,19 +34,19 @@ struct HSB: Equatable {
 
     var color: Color { Color(hue: h, saturation: s, brightness: b) }
 
-    /// Blend toward white by `amount` (0 = unchanged, 1 = white): saturation
-    /// drains as brightness rises, like a colour overdriven into incandescence.
-    /// `original` is returned verbatim at `amount <= 0` so a bar that isn't
-    /// peaking renders bit-identically to the un-decomposed colour.
-    func whitened(_ amount: Double, original: Color) -> Color {
-        guard amount > 0 else { return original }
-        let k = min(1, CGFloat(amount))
-        return Color(hue: h, saturation: s * (1 - k), brightness: b + (1 - b) * k)
-    }
-
     /// Same hue and saturation, brightness scaled by `factor` (clamped).
     func brightnessScaled(_ factor: Double) -> Color {
         Color(hue: h, saturation: s, brightness: min(1, max(0.1, b * CGFloat(factor))))
+    }
+
+    /// Same hue, saturation and brightness each scaled — the two axes a
+    /// spectrum bar's vertical gradient actually travels along.
+    func scaled(saturation sFactor: Double, brightness bFactor: Double) -> Color {
+        Color(
+            hue: h,
+            saturation: min(1, max(0, s * CGFloat(sFactor))),
+            brightness: min(1, max(0.1, b * CGFloat(bFactor)))
+        )
     }
 
     /// Interpolation toward `other`, hue travelling the *shortest arc* — RGB
@@ -111,7 +111,13 @@ struct ArtworkAccents: Equatable {
     }
 }
 
-struct CoverBarPalette: Equatable {
+/// A class deriving its rows lazily, not a precomputed struct: building the
+/// row for every supported bar count eagerly meant ~30 rows × up to 32 bars ×
+/// 2 ColorSync conversions on every track change (and every tuning-slider
+/// step), of which one or two rows were ever drawn. The expensive per-cover
+/// analysis still happens once, off the main thread; a row is a couple of
+/// vote passes over a 48×48 sample, cheap enough to do on first use.
+final class CoverBarPalette: Equatable {
     struct Bar: Equatable {
         let top: Color
         let bottom: Color
@@ -135,19 +141,42 @@ struct CoverBarPalette: Equatable {
         }
     }
 
-    /// Bar counts the table is built for — everything the pill's bar-count
+    /// Bar counts a row can be derived for — everything the pill's bar-count
     /// slider can ask for (6…32), the small waves (3…5) and the music tab (6).
     static let supportedBarCounts = Array(3...32)
 
-    let bars: [Int: [Bar]]
+    /// Derives the row for one bar count. Captures the finished per-cover
+    /// analysis (quantised pixel assignments), so calling it is cheap.
+    private let derive: (Int) -> [Bar]
+    /// Memoized rows, filled on demand. Main-thread only, like every other
+    /// consumer of the palette.
+    private var rows: [Int: [Bar]] = [:]
+
+    init(derive: @escaping (Int) -> [Bar]) {
+        self.derive = derive
+    }
+
+    /// Fixed-content palette for tests and previews.
+    convenience init(bars: [Int: [Bar]]) {
+        self.init { bars[$0] ?? [] }
+    }
+
+    /// One palette is built per cover × tuning, so identity is equality —
+    /// exactly the "did the cover change" question SwiftUI asks.
+    static func == (lhs: CoverBarPalette, rhs: CoverBarPalette) -> Bool { lhs === rhs }
 
     func bar(forBarAt index: Int, total: Int) -> Bar? {
-        // Fall back to the nearest count we did compute rather than drawing
-        // nothing, if a caller ever asks for an unsupported bar count.
-        let row = bars[total] ?? bars[Self.supportedBarCounts.min {
-            abs($0 - total) < abs($1 - total)
-        } ?? 5]
-        guard let row, index >= 0, !row.isEmpty else { return nil }
+        // Clamp to the nearest supported count rather than drawing nothing,
+        // if a caller ever asks for an unsupported bar count.
+        let count = Self.supportedBarCounts.contains(total)
+            ? total
+            : Self.supportedBarCounts.min { abs($0 - total) < abs($1 - total) } ?? 5
+        let row = rows[count] ?? {
+            let derived = derive(count)
+            rows[count] = derived
+            return derived
+        }()
+        guard index >= 0, !row.isEmpty else { return nil }
         return row[min(index, row.count - 1)]
     }
 }
@@ -646,10 +675,12 @@ enum ArtworkColor {
             return shadedStep(palette[winner].color, level: level)
         }
 
-        // Image rows run top-down, and so do the bars, so row 0 is the bar's top.
-        var bars: [Int: [CoverBarPalette.Bar]] = [:]
-        for count in CoverBarPalette.supportedBarCounts {
-            bars[count] = (0..<count).map { index in
+        // Image rows run top-down, and so do the bars, so row 0 is the bar's
+        // top. Rows are derived lazily per requested count — see
+        // `CoverBarPalette`; the closure captures the finished stage-one
+        // assignment, so a row costs two vote passes, not a re-analysis.
+        return CoverBarPalette { count in
+            (0..<count).map { index in
                 let x0 = geometry.x0 + index * geometry.usableX / count
                 let x1 = max(x0 + 1, geometry.x0 + (index + 1) * geometry.usableX / count)
                 let midY = geometry.y0 + geometry.usableY / 2
@@ -659,7 +690,6 @@ enum ArtworkColor {
                 )
             }
         }
-        return CoverBarPalette(bars: bars)
     }
 
     /// The palette colour at one of `brightnessLevels` steps — same hue and
@@ -694,9 +724,8 @@ enum ArtworkColor {
             return Color(white: clamped((0.55 + 0.4 * level) * tuning.brightness))
         }
 
-        var bars: [Int: [CoverBarPalette.Bar]] = [:]
-        for count in CoverBarPalette.supportedBarCounts {
-            bars[count] = (0..<count).map { index in
+        return CoverBarPalette { count in
+            (0..<count).map { index in
                 let x0 = geometry.x0 + index * geometry.usableX / count
                 let x1 = max(x0 + 1, geometry.x0 + (index + 1) * geometry.usableX / count)
                 let midY = geometry.y0 + geometry.usableY / 2
@@ -706,7 +735,6 @@ enum ArtworkColor {
                 )
             }
         }
-        return CoverBarPalette(bars: bars)
     }
 
     private static func hue(of rgb: (r: CGFloat, g: CGFloat, b: CGFloat)) -> CGFloat {

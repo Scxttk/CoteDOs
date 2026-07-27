@@ -23,6 +23,17 @@ final class SpectrumBands: ObservableObject {
     fileprivate init(count: Int) {
         values = Array(repeating: 0, count: count)
     }
+
+    #if DEBUG
+    /// Frozen levels for the snapshot harness — the stage view is only worth
+    /// looking at with a real spectrum shape in it. Lives here because the
+    /// setter is deliberately closed to everything but the analyzer.
+    static func forTesting(_ values: [CGFloat]) -> SpectrumBands {
+        let bands = SpectrumBands(count: values.count)
+        bands.values = values
+        return bands
+    }
+    #endif
 }
 
 /// Real-time frequency visualizer data. Taps the system audio output with a
@@ -151,6 +162,25 @@ final class SpectrumAnalyzer: ObservableObject {
     private static let dormancyAfterSeconds: Float = 2
     private static let dormancyPeakGate: Float = 1e-4
 
+    // Suspension: dormancy makes silent callbacks cheap, but the tap itself
+    // is not free even then — while it exists, coreaudiod holds a
+    // PreventUserIdleSystemSleep assertion and streams zeroes through the
+    // HAL all day. After prolonged silence the whole tap is torn down and
+    // the source-check timer flips into a cheap resume probe (see
+    // `sourceTimerFired`): CoreAudio's process list says when some app
+    // starts output again, and the tap is rebuilt. `pokeResume()`
+    // short-cuts the probe latency for the scriptable players. Some apps
+    // (Chrome) keep an output stream open while silent, which would
+    // oscillate suspend→probe→resume→suspend forever; a resume that never
+    // sees a real signal therefore backs the probe off a stage.
+    private var desired = false            // start() called and not stop()ed
+    private var suspended = false          // tap torn down after silence
+    private var suspendRequested = false   // one main-hop per silent stretch
+    private var sawSignalSinceResume = true
+    private var probeStage = 0
+    private static let suspendAfterSeconds: Float = 30
+    private static let probeIntervalsSeconds: [Double] = [3, 6, 12, 30]
+
     private let queue = DispatchQueue(label: "com.scott.notchmate.spectrum", qos: .userInitiated)
 
     init(bandCount: Int = 6) {
@@ -181,7 +211,21 @@ final class SpectrumAnalyzer: ObservableObject {
     // MARK: - Lifecycle
 
     func start() {
+        guard !desired else { return }
+        desired = true
+        probeStage = 0
+        buildTap()
+    }
+
+    /// Actually creates the tap + aggregate and starts IO. Split off `start()`
+    /// so the silence suspension can rebuild the tap without touching the
+    /// user-level started/stopped state.
+    private func buildTap() {
         guard !running else { return }
+        suspended = false
+        suspendRequested = false
+        sawSignalSinceResume = false
+        silentSeconds = 0
         guard #available(macOS 14.4, *) else { return }   // process taps are 14.4+
 
         // 1. A private global tap of the system output — observes what's playing
@@ -232,7 +276,12 @@ final class SpectrumAnalyzer: ObservableObject {
     }
 
     func stop() {
-        let wasRunning = aggregateID != 0 || tapID != 0
+        // `suspended` counts as running for the reset below: the tap is gone
+        // but `isLive` stayed true through the suspension.
+        let wasRunning = aggregateID != 0 || tapID != 0 || suspended
+        desired = false
+        suspended = false
+        suspendRequested = false
         pendingRebuild?.cancel()
         pendingRebuild = nil
         teardown()
@@ -311,6 +360,41 @@ final class SpectrumAnalyzer: ObservableObject {
         }
     }
 
+    // MARK: - Silence suspension
+
+    /// Main thread. Drops the tap (and with it coreaudiod's
+    /// `PreventUserIdleSystemSleep` assertion) after prolonged silence. The
+    /// source-check timer stays alive as the resume probe. No published state
+    /// changes: `hasSignal` has long expired and the bands sit at zero by the
+    /// time this fires, and `isLive` deliberately stays true — as far as the
+    /// UI is concerned the analyzer is still on duty.
+    private func suspendForSilence() {
+        guard desired, running, !suspended else { suspendRequested = false; return }
+        suspended = true
+        // A probe-resume that never saw a real signal means some app keeps a
+        // silent output stream open (Chrome); back the probe off so the pair
+        // doesn't oscillate at full rate.
+        if !sawSignalSinceResume {
+            probeStage = min(probeStage + 1, Self.probeIntervalsSeconds.count - 1)
+        }
+        teardown()
+        rescheduleSourceCheckTimer()
+    }
+
+    /// Main thread. Rebuilds the tap after a silence suspension.
+    private func resumeFromSuspension(resetBackoff: Bool) {
+        guard desired, suspended else { return }
+        if resetBackoff { probeStage = 0 }
+        buildTap()
+    }
+
+    /// A trustworthy external hint that audio is starting — the scriptable
+    /// players' state flipped to playing. Resumes instantly instead of waiting
+    /// for the next probe, and resets the probe backoff.
+    func pokeResume() {
+        resumeFromSuspension(resetBackoff: true)
+    }
+
     // MARK: - Audio thread
 
     /// Runs on `queue`. Pulls channel 0, slides it into the analysis window, and
@@ -338,9 +422,19 @@ final class SpectrumAnalyzer: ObservableObject {
                 isDormant = true
                 for i in smoothed.indices { smoothed[i] = 0 }
             }
+            // Prolonged silence: drop the whole tap, not just the FFT. One
+            // main-hop per silent stretch; `suspendForSilence` runs where
+            // `start`/`stop` do (tearing the IOProc down from its own queue
+            // deadlocks the HAL — see `rebuildForDeviceChange`).
+            if silentSeconds >= Self.suspendAfterSeconds, !suspendRequested {
+                suspendRequested = true
+                DispatchQueue.main.async { [weak self] in self?.suspendForSilence() }
+            }
         } else {
             silentSeconds = 0
             isDormant = false
+            sawSignalSinceResume = true
+            probeStage = 0
         }
 
         if !isDormant {
@@ -555,9 +649,11 @@ final class SpectrumAnalyzer: ObservableObject {
     // MARK: - Source app identification
 
     private func startSourceCheckTimer() {
+        // A rebuild after suspension finds the timer already alive.
+        guard sourceCheckTimer == nil else { rescheduleSourceCheckTimer(); return }
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now(), repeating: 1.0)
-        timer.setEventHandler { [weak self] in self?.refreshSourceBundleID() }
+        timer.schedule(deadline: .now())
+        timer.setEventHandler { [weak self] in self?.sourceTimerFired() }
         timer.resume()
         sourceCheckTimer = timer
     }
@@ -567,11 +663,46 @@ final class SpectrumAnalyzer: ObservableObject {
         sourceCheckTimer = nil
     }
 
+    /// One timer, three cadences: 1 s while a signal plays (the pill's source
+    /// icon should track app switches quickly), 5 s while the tap runs but
+    /// everything is silent (the icon isn't shown then, and the scan walks
+    /// every CoreAudio process object — no reason to do that each second all
+    /// day), and the backoff ladder while suspended, where the same scan *is*
+    /// the resume probe.
+    private var sourceCheckInterval: Double {
+        if suspended { return Self.probeIntervalsSeconds[min(probeStage, Self.probeIntervalsSeconds.count - 1)] }
+        return isDormant ? 5.0 : 1.0
+    }
+
+    private func rescheduleSourceCheckTimer() {
+        sourceCheckTimer?.schedule(deadline: .now() + sourceCheckInterval)
+    }
+
+    /// Runs on `queue`, self-rescheduling (the cadence depends on state).
+    private func sourceTimerFired() {
+        if suspended {
+            if foreignOutputBundleID() != nil {
+                DispatchQueue.main.async { [weak self] in self?.resumeFromSuspension(resetBackoff: false) }
+            }
+        } else {
+            refreshSourceBundleID()
+        }
+        rescheduleSourceCheckTimer()
+    }
+
     /// Scans every process with an active output stream and picks the first
     /// one that isn't us, so the collapsed pill can show its icon. Runs on
     /// `queue`, once a second — see `sourceBundleID`'s doc for why a plain poll
     /// beats a CoreAudio property listener here.
     private func refreshSourceBundleID() {
+        publish(sourceBundleID: foreignOutputBundleID())
+    }
+
+    /// The (attributed) bundle ID of the first process other than us with an
+    /// active output stream, or nil. Doubles as the resume probe while
+    /// suspended: "someone is producing output again" is exactly the signal
+    /// that makes rebuilding the tap worthwhile.
+    private func foreignOutputBundleID() -> String? {
         let ownBundleID = Bundle.main.bundleIdentifier
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyProcessObjectList,
@@ -580,15 +711,11 @@ final class SpectrumAnalyzer: ObservableObject {
         )
         var size: UInt32 = 0
         guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size) == noErr,
-              size > 0 else {
-            publish(sourceBundleID: nil)
-            return
-        }
+              size > 0 else { return nil }
         let count = Int(size) / MemoryLayout<AudioObjectID>.size
         var processes = [AudioObjectID](repeating: 0, count: count)
         guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &processes) == noErr else {
-            publish(sourceBundleID: nil)
-            return
+            return nil
         }
 
         var isRunningAddress = AudioObjectPropertyAddress(
@@ -602,10 +729,9 @@ final class SpectrumAnalyzer: ObservableObject {
             guard AudioObjectGetPropertyData(process, &isRunningAddress, 0, nil, &runningSize, &isRunning) == noErr,
                   isRunning != 0 else { continue }
             guard let bundleID = stringProperty(process, kAudioProcessPropertyBundleID), bundleID != ownBundleID else { continue }
-            publish(sourceBundleID: Self.attributedBundleID(for: bundleID))
-            return
+            return Self.attributedBundleID(for: bundleID)
         }
-        publish(sourceBundleID: nil)
+        return nil
     }
 
     /// WebKit's audio/GPU XPC helpers (e.g. `com.apple.WebKit.GPU`) are what

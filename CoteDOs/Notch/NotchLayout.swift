@@ -32,38 +32,82 @@ enum NotchLayout {
     /// "abgeschnitten von") the top screen edge.
     static let collapsedArtworkWidth: CGFloat = 14
     /// The little frequency (wave-bars) visualizer next to the artwork.
-    static let collapsedWavesWidth: CGFloat = 16
+    /// 5 × 2.0 + 4 × 1.6 = 16.4, rounded up for a hair of buffer.
+    static let collapsedWavesWidth: CGFloat = 17
     /// Corner radius of the collapsed pill's artwork thumbnail.
     static let collapsedArtworkCornerRadius: CGFloat = 3.5
-    /// Wave-bars geometry inside the collapsed pill: 5 bars, thicker relative
-    /// to their gaps than a hairline equalizer — matches the iPhone Dynamic
-    /// Island's chunkier, closely-packed bars more closely than the earlier
-    /// 6-hairline-bar version did. (5 × 2.0 + 4 × 1.0 = 14, `collapsedWavesWidth`
-    /// above rounds up for a hair of buffer.)
+    /// Wave-bars geometry inside the collapsed pill. Both numbers are measured
+    /// off a real iPhone's Dynamic Island rather than guessed: screenshots of
+    /// the now-playing island (3× scale, converted to points) give bars of
+    /// 1.67–2.33 pt with 1.33–2.00 pt of air between them, on a 3.67 pt pitch.
+    /// Ours were 2.0 wide with only 1.0 of gap, which reads as a denser, more
+    /// clotted run than Apple's.
     static let collapsedWaveBarCount: Int = 5
     static let collapsedWaveMaxHeight: CGFloat = 12
     static let collapsedWaveBarWidth: CGFloat = 2.0
-    static let collapsedWaveSpacing: CGFloat = 1.0
+    static let collapsedWaveSpacing: CGFloat = 1.6
+    // MARK: Spectrum-only pill
+
     /// Spectrum-only pill (`UserSettings.pillSpectrumOnly`): the wave replaces
     /// the artwork thumbnail entirely and the whole pill grows into a stage
     /// for it — this mode exists to *watch*, so it deliberately takes more
-    /// room than the cover+wave layout it replaces. Bar count and wave width
-    /// are user-tunable (`pillSpectrumBarCount`/`pillSpectrumWidth`); these
-    /// constants are the defaults and what the snapshot tests render. The
-    /// taller pill (`collapsedTallHeight`) gives the bars real travel.
-    /// Effektive Breite des Spectrum-only-Waves: nie schmaler als die
-    /// Mindest-Inhaltsbreite der Balken (Balkenbreite + Mindest-Spacing),
-    /// sonst quillt der HStack in `WaveBarsView` über seinen fixen Frame und
-    /// frisst den Abstand zum Timer-Segment. View und Width-Schätzung
-    /// (`NotchViewModel.collapsedWidth`) lesen beide diesen Helper.
-    static func pillSpectrumEffectiveWidth(barCount: Int, requestedWidth: Double) -> CGFloat {
-        let minContent = CGFloat(barCount) * collapsedWaveBarWidth
-            + CGFloat(max(0, barCount - 1)) * collapsedWaveSpacing
-        return max(CGFloat(requestedWidth), minContent)
+    /// room than the cover+wave layout it replaces.
+    ///
+    /// There is exactly **one** knob, `UserSettings.pillSpectrumWidth`, and it
+    /// widens the wave. Bar width and gap never change with it; the run simply
+    /// gains bars, and the pill grows to hold them. Letting the user set width
+    /// *and* bar count independently (as this did) meant every combination
+    /// re-spaced the bars, so most settings looked wrong and the defaults were
+    /// the only ones tuned.
+    ///
+    /// Centre-to-centre distance between two bars.
+    static var pillSpectrumBarPitch: CGFloat { collapsedWaveBarWidth + collapsedWaveSpacing }
+
+    /// Gap as a fraction of bar width (1.6 / 2.0). The one number that has to
+    /// survive when the wave is scaled to a surface it was never sized for —
+    /// the spectrum page, or a screen saver — so a blown-up run keeps the
+    /// proportions measured off the Dynamic Island instead of turning into
+    /// either hairlines or slabs.
+    static var waveBarGapRatio: CGFloat { collapsedWaveSpacing / collapsedWaveBarWidth }
+
+    /// Bar width that fits exactly `count` bars into `width` at that ratio.
+    /// `width = count·b + (count-1)·ratio·b`, solved for `b`.
+    static func waveBarWidth(fitting count: Int, into width: CGFloat) -> CGFloat {
+        let n = CGFloat(max(1, count))
+        return width / (n + (n - 1) * waveBarGapRatio)
     }
+    /// Narrowest and widest the run may get, in bars.
+    static let pillSpectrumBarRange = 4...32
+
+    /// Exact width of a run of `count` bars — no trailing gap.
+    static func pillSpectrumWidth(forBarCount count: Int) -> CGFloat {
+        let n = max(1, count)
+        return CGFloat(n) * collapsedWaveBarWidth + CGFloat(n - 1) * collapsedWaveSpacing
+    }
+
+    /// How many bars fit a requested width, clamped to `pillSpectrumBarRange`.
+    static func pillSpectrumBarCount(forWidth width: Double) -> Int {
+        let raw = (CGFloat(width) + collapsedWaveSpacing) / pillSpectrumBarPitch
+        return min(max(Int(raw.rounded()), pillSpectrumBarRange.lowerBound), pillSpectrumBarRange.upperBound)
+    }
+
+    /// The requested width snapped to a whole number of bars. The view and the
+    /// width estimate in `NotchViewModel.collapsedWidth` both read this, so the
+    /// pill is always exactly as wide as the run inside it.
+    static func pillSpectrumSnappedWidth(_ requestedWidth: Double) -> CGFloat {
+        pillSpectrumWidth(forBarCount: pillSpectrumBarCount(forWidth: requestedWidth))
+    }
+
+    /// Apple's own run, measured: 6 bars, 20.0 pt end to end. That is the
+    /// default the slider starts at.
+    static var pillSpectrumDefaultWidth: Double { Double(pillSpectrumWidth(forBarCount: 6)) }
+    static var pillSpectrumMinWidth: Double { Double(pillSpectrumWidth(forBarCount: pillSpectrumBarRange.lowerBound)) }
+    static var pillSpectrumMaxWidth: Double { Double(pillSpectrumWidth(forBarCount: pillSpectrumBarRange.upperBound)) }
     static let collapsedWideWaveBarCount: Int = 16
     static let collapsedWideWaveMaxHeight: CGFloat = 18
-    static let collapsedWideWavesWidth: CGFloat = 48
+    /// Derived, not typed in: the bar pitch is fixed now, so a hardcoded width
+    /// would silently mis-frame the run the moment the gap is retuned.
+    static var collapsedWideWavesWidth: CGFloat { pillSpectrumWidth(forBarCount: collapsedWideWaveBarCount) }
     static let collapsedWideWaveFrameHeight: CGFloat = 20
     /// Pill height while the spectrum-only mode is on (all island stages read
     /// it through `NotchViewModel.collapsedHeight`, so silhouette, hit rect

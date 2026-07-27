@@ -127,11 +127,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func screensDidSleep() {
         nowPlaying.setScreensAwake(false)
         pomodoro.setScreensAwake(false)
+        // The AX polls (Safari fullscreen, menu-bar overlap) answer questions
+        // about a display nobody can see — stop them with the screen, not
+        // just with system sleep.
+        windowController?.suspendMonitors()
     }
 
     @objc private func screensDidWake() {
         nowPlaying.setScreensAwake(true)
         pomodoro.setScreensAwake(true)
+        windowController?.resumeMonitors()
     }
 
     @objc private func screenParametersChanged() {

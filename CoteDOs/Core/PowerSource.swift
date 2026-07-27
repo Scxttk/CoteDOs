@@ -8,8 +8,10 @@ import IOKit.ps
 /// On battery that easing is dropped: a SwiftUI animation in flight forces a
 /// re-evaluation on every 60 Hz display refresh regardless of how often the
 /// bands actually change, and it is by a wide margin the most expensive thing
-/// this app does — measured at ~52% of a core with it and ~16% without, same
-/// signal, same machine. Everything else about the wave is identical in both
+/// this app does — even after the `Canvas` rewrite collapsed the per-frame
+/// cost, the always-in-flight ease still measured 25–28% of a core against
+/// 9–11% without it, same signal, same machine, alternating builds.
+/// Everything else about the wave is identical in both
 /// modes; only the interpolation between frames goes away, which reads as a
 /// visibly harder, stepped motion.
 ///

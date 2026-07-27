@@ -4,6 +4,7 @@ import SwiftUI
 final class NotchViewModel: ObservableObject {
     enum Tab: CaseIterable {
         case music
+        case spectrum
         case files
         case capture
         case timer
@@ -12,6 +13,7 @@ final class NotchViewModel: ObservableObject {
         var title: String {
             switch self {
             case .music:   return String(localized: "tab.music", defaultValue: "Musik")
+            case .spectrum: return String(localized: "tab.spectrum", defaultValue: "Spectrum")
             case .files:   return String(localized: "tab.files", defaultValue: "Ablage")
             case .capture: return String(localized: "tab.capture", defaultValue: "Capture")
             case .timer:   return String(localized: "tab.timer", defaultValue: "Timer")
@@ -22,6 +24,7 @@ final class NotchViewModel: ObservableObject {
         var icon: String {
             switch self {
             case .music:   return "waveform"   // the app's own identity, not a note
+            case .spectrum: return "chart.bar.fill"
             case .files:   return "tray.full"
             case .capture: return "square.and.pencil"
             case .timer:   return "timer"
@@ -153,9 +156,7 @@ final class NotchViewModel: ObservableObject {
             // same width, but both read their own constant so neither silently
             // drifts if one is retuned.
             core = UserSettings.shared.pillSpectrumOnly
-                ? NotchLayout.pillSpectrumEffectiveWidth(
-                    barCount: UserSettings.shared.pillSpectrumBarCount,
-                    requestedWidth: UserSettings.shared.pillSpectrumWidth)
+                ? NotchLayout.pillSpectrumSnappedWidth(UserSettings.shared.pillSpectrumWidth)
                 : NotchLayout.collapsedArtworkWidth + NotchLayout.collapsedItemSpacing + NotchLayout.collapsedWavesWidth
             if let timerText {
                 core += NotchLayout.collapsedItemSpacing + Self.timerSegmentWidth(timerText)

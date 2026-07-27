@@ -96,6 +96,10 @@ struct NotchRootView: View {
             // When music starts, surface the music tab.
             if playing { viewModel.selectedTab = .music }
             syncSpectrum()
+            // If the tap suspended itself after silence, a player flipping to
+            // "playing" is the fastest resume signal there is — don't wait
+            // for the probe.
+            if playing { spectrum.pokeResume() }
         }
         .onChange(of: nowPlaying.screensAwake) { _, _ in syncSpectrum() }
     }
@@ -160,7 +164,6 @@ struct NotchRootView: View {
             // staged walk's withAnimation calls; morph instead of snapping.
             .animation(NotchLayout.islandMorphAnimation, value: settings.pillSpectrumOnly)
             .animation(NotchLayout.islandMorphAnimation, value: settings.pillSpectrumWidth)
-            .animation(NotchLayout.islandMorphAnimation, value: settings.pillSpectrumBarCount)
             // Timer start/stop and audio start/stop change width *and* offset
             // at rest, outside the walk's withAnimation calls; slide, don't snap.
             .animation(NotchLayout.islandMorphAnimation, value: pomodoro.pillText != nil)
@@ -386,6 +389,20 @@ private struct ExpandedView: View {
                 GeometryReader { geo in
                     HStack(spacing: 0) {
                         page(.music, in: geo.size) { NowPlayingView(nowPlaying: nowPlaying, spectrum: spectrum) }
+                        page(.spectrum, in: geo.size) {
+                            // The whole page is the wave. Colours follow the
+                            // playing track when there is one; system audio
+                            // with no scriptable track just gets the default.
+                            SpectrumStageView(
+                                levels: spectrum.bands,
+                                isLive: spectrum.isLive,
+                                isActive: nowPlaying.screensAwake,
+                                tint: nowPlaying.track != nil ? nowPlaying.artworkColor : nil,
+                                secondaryTint: nowPlaying.track != nil ? nowPlaying.artworkSecondaryColor : nil,
+                                tertiaryTint: nowPlaying.track != nil ? nowPlaying.artworkTertiaryColor : nil,
+                                coverBars: nowPlaying.track != nil ? nowPlaying.coverBars : nil
+                            )
+                        }
                         page(.files, in: geo.size) { ShelfView(shelf: shelf) }
                         page(.capture, in: geo.size) { CaptureView(capture: capture, viewModel: viewModel) }
                         page(.timer, in: geo.size) { PomodoroView(pomodoro: pomodoro) }
@@ -624,12 +641,10 @@ private struct CollapsedView: View {
                     // space the thumbnail freed up. Bar count and wave width
                     // are user-tunable; the bars spread evenly across the
                     // width, so fewer bars simply means wider gaps.
-                    let barCount = settings.pillSpectrumBarCount
-                    let waveWidth = NotchLayout.pillSpectrumEffectiveWidth(
-                        barCount: barCount, requestedWidth: settings.pillSpectrumWidth)
-                    let spacing = barCount > 1
-                        ? (waveWidth - CGFloat(barCount) * NotchLayout.collapsedWaveBarWidth) / CGFloat(barCount - 1)
-                        : 0
+                    // Fixed bar width and gap; the slider only decides how many
+                    // bars there are. See `NotchLayout.pillSpectrumSnappedWidth`.
+                    let barCount = NotchLayout.pillSpectrumBarCount(forWidth: settings.pillSpectrumWidth)
+                    let waveWidth = NotchLayout.pillSpectrumWidth(forBarCount: barCount)
                     LiveWaveBarsView(
                         levels: spectrum.bands,
                         isLive: spectrum.isLive,
@@ -641,11 +656,7 @@ private struct CollapsedView: View {
                         count: barCount,
                         maxHeight: NotchLayout.collapsedWideWaveMaxHeight,
                         barWidth: NotchLayout.collapsedWaveBarWidth,
-                        spacing: max(NotchLayout.collapsedWaveSpacing, spacing),
-                        // The pill draws all day; an offscreen render target
-                        // per frame costs more here than it saves. See
-                        // `WaveBarsView.flattensToLayer`.
-                        flattensToLayer: false
+                        spacing: NotchLayout.collapsedWaveSpacing
                     )
                     .frame(width: waveWidth, height: NotchLayout.collapsedWideWaveFrameHeight)
                     .transition(.opacity.combined(with: .scale(scale: 0.85)))
@@ -698,8 +709,7 @@ private struct CollapsedView: View {
                         count: NotchLayout.collapsedWaveBarCount,
                         maxHeight: NotchLayout.collapsedWaveMaxHeight,
                         barWidth: NotchLayout.collapsedWaveBarWidth,
-                        spacing: NotchLayout.collapsedWaveSpacing,
-                        flattensToLayer: false
+                        spacing: NotchLayout.collapsedWaveSpacing
                     )
                     .frame(width: NotchLayout.collapsedWavesWidth, height: NotchLayout.collapsedArtworkWidth)
                     .transition(.opacity)
@@ -735,7 +745,6 @@ private struct CollapsedView: View {
         // expand/collapse walk's explicit withAnimation calls.
         .animation(NotchLayout.islandMorphAnimation, value: settings.pillSpectrumOnly)
         .animation(NotchLayout.islandMorphAnimation, value: settings.pillSpectrumWidth)
-        .animation(NotchLayout.islandMorphAnimation, value: settings.pillSpectrumBarCount)
         // Resolved at the pill level (not inside the thumbnail branch) so the
         // source-app tint keeps refreshing in spectrum-only mode, where no
         // icon is on screen but the wave still wants the app's accent.

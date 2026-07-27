@@ -141,7 +141,9 @@ final class UserSettings: ObservableObject {
         static let spectrumColorA = "spectrumColorA"
         static let spectrumColorB = "spectrumColorB"
         static let pillSpectrumOnly = "pillSpectrumOnly"
-        static let pillSpectrumBarCount = "pillSpectrumBarCount"
+        /// Removed: the bar count is derived from `pillSpectrumWidth` now. Kept
+        /// as a name only so the migration below can find and clear it.
+        static let legacyPillSpectrumBarCount = "pillSpectrumBarCount"
         static let pillSpectrumWidth = "pillSpectrumWidth"
         // Obsidian Quick Capture
         static let vaultBookmark = "obsidianVaultBookmark"
@@ -161,6 +163,7 @@ final class UserSettings: ObservableObject {
         static let timerSoundEnabled = "timerSoundEnabled"
         // Tab visibility (claudeTabEnabled predates the others — keep its key)
         static let musicTabEnabled = "musicTabEnabled"
+        static let spectrumTabEnabled = "spectrumTabEnabled"
         static let filesTabEnabled = "filesTabEnabled"
         static let captureTabEnabled = "captureTabEnabled"
         static let timerTabEnabled = "timerTabEnabled"
@@ -218,12 +221,11 @@ final class UserSettings: ObservableObject {
     @Published var pillSpectrumOnly: Bool {
         didSet { defaults.set(pillSpectrumOnly, forKey: Key.pillSpectrumOnly) }
     }
-    /// How many bars the spectrum-only pill draws (6…32 — 32 is the
-    /// analyzer's full band resolution) and how wide the pill's wave area is.
-    /// The bars spread evenly across that width: fewer bars → wider gaps.
-    @Published var pillSpectrumBarCount: Int {
-        didSet { defaults.set(pillSpectrumBarCount, forKey: Key.pillSpectrumBarCount) }
-    }
+    /// How wide the spectrum-only pill's wave is, in points — the only knob.
+    /// Bar width and gap are fixed (see `NotchLayout`), so widening this adds
+    /// bars rather than re-spacing the ones already there, and the pill grows
+    /// with the run. Replaced a width slider *and* a bar-count stepper, whose
+    /// combinations mostly produced spacings nobody had looked at.
     @Published var pillSpectrumWidth: Double {
         didSet { defaults.set(pillSpectrumWidth, forKey: Key.pillSpectrumWidth) }
     }
@@ -307,6 +309,9 @@ final class UserSettings: ObservableObject {
     @Published var musicTabEnabled: Bool {
         didSet { defaults.set(musicTabEnabled, forKey: Key.musicTabEnabled) }
     }
+    @Published var spectrumTabEnabled: Bool {
+        didSet { defaults.set(spectrumTabEnabled, forKey: Key.spectrumTabEnabled) }
+    }
     @Published var filesTabEnabled: Bool {
         didSet { defaults.set(filesTabEnabled, forKey: Key.filesTabEnabled) }
     }
@@ -323,6 +328,7 @@ final class UserSettings: ObservableObject {
     func isTabEnabled(_ tab: NotchViewModel.Tab) -> Bool {
         switch tab {
         case .music: return musicTabEnabled
+        case .spectrum: return spectrumTabEnabled
         case .files: return filesTabEnabled
         case .capture: return captureTabEnabled
         case .timer: return timerTabEnabled
@@ -333,6 +339,7 @@ final class UserSettings: ObservableObject {
     func setTab(_ tab: NotchViewModel.Tab, enabled: Bool) {
         switch tab {
         case .music: musicTabEnabled = enabled
+        case .spectrum: spectrumTabEnabled = enabled
         case .files: filesTabEnabled = enabled
         case .capture: captureTabEnabled = enabled
         case .timer: timerTabEnabled = enabled
@@ -357,6 +364,7 @@ final class UserSettings: ObservableObject {
             Key.timerAutoChain: false,
             Key.timerSoundEnabled: true,
             Key.musicTabEnabled: true,
+            Key.spectrumTabEnabled: true,
             Key.filesTabEnabled: true,
             Key.captureTabEnabled: true,
             Key.timerTabEnabled: true,
@@ -366,8 +374,7 @@ final class UserSettings: ObservableObject {
             Key.coverBarSaturation: 1.0,
             Key.coverBarBrightness: 1.0,
             Key.pillSpectrumOnly: false,
-            Key.pillSpectrumBarCount: 16,
-            Key.pillSpectrumWidth: 48.0,
+            Key.pillSpectrumWidth: NotchLayout.pillSpectrumDefaultWidth,
         ])
         self.mediaSource = MediaSource(rawValue: defaults.string(forKey: Key.mediaSource) ?? "") ?? .auto
         self.appearance = Appearance(rawValue: defaults.string(forKey: Key.appearance) ?? "") ?? .system
@@ -381,8 +388,18 @@ final class UserSettings: ObservableObject {
         self.coverBarSaturation = defaults.double(forKey: Key.coverBarSaturation)
         self.coverBarBrightness = defaults.double(forKey: Key.coverBarBrightness)
         self.pillSpectrumOnly = defaults.bool(forKey: Key.pillSpectrumOnly)
-        self.pillSpectrumBarCount = max(6, min(32, defaults.integer(forKey: Key.pillSpectrumBarCount)))
-        self.pillSpectrumWidth = max(36, min(140, defaults.double(forKey: Key.pillSpectrumWidth)))
+        // The width used to mean "spread N bars across this much room", with N
+        // set separately. It now means "this much room, filled with bars at a
+        // fixed pitch" — a stored value from the old scheme would land on an
+        // arbitrary bar count, so an install carrying the retired key starts
+        // over at the default instead.
+        if defaults.object(forKey: Key.legacyPillSpectrumBarCount) != nil {
+            defaults.removeObject(forKey: Key.legacyPillSpectrumBarCount)
+            defaults.set(NotchLayout.pillSpectrumDefaultWidth, forKey: Key.pillSpectrumWidth)
+        }
+        self.pillSpectrumWidth = max(NotchLayout.pillSpectrumMinWidth,
+                                     min(NotchLayout.pillSpectrumMaxWidth,
+                                         defaults.double(forKey: Key.pillSpectrumWidth)))
         self.spectrumColorA = Self.decodeColor(defaults.data(forKey: Key.spectrumColorA)) ?? .cyan
         self.spectrumColorB = Self.decodeColor(defaults.data(forKey: Key.spectrumColorB)) ?? .purple
         self.vaultBookmark = defaults.data(forKey: Key.vaultBookmark)
@@ -400,6 +417,7 @@ final class UserSettings: ObservableObject {
         self.timerAutoChain = defaults.bool(forKey: Key.timerAutoChain)
         self.timerSoundEnabled = defaults.bool(forKey: Key.timerSoundEnabled)
         self.musicTabEnabled = defaults.bool(forKey: Key.musicTabEnabled)
+        self.spectrumTabEnabled = defaults.bool(forKey: Key.spectrumTabEnabled)
         self.filesTabEnabled = defaults.bool(forKey: Key.filesTabEnabled)
         self.captureTabEnabled = defaults.bool(forKey: Key.captureTabEnabled)
         self.timerTabEnabled = defaults.bool(forKey: Key.timerTabEnabled)

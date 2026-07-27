@@ -10,7 +10,6 @@ final class CollapsedGeometryTests: XCTestCase {
     private var viewModel: NotchViewModel!
     private var originalSpectrumOnly = false
     private var originalSpectrumWidth = 0.0
-    private var originalSpectrumBarCount = 0
 
     override func setUp() {
         super.setUp()
@@ -19,14 +18,12 @@ final class CollapsedGeometryTests: XCTestCase {
         // depend on whatever the host app's defaults happen to be.
         originalSpectrumOnly = UserSettings.shared.pillSpectrumOnly
         originalSpectrumWidth = UserSettings.shared.pillSpectrumWidth
-        originalSpectrumBarCount = UserSettings.shared.pillSpectrumBarCount
         UserSettings.shared.pillSpectrumOnly = false
     }
 
     override func tearDown() {
         UserSettings.shared.pillSpectrumOnly = originalSpectrumOnly
         UserSettings.shared.pillSpectrumWidth = originalSpectrumWidth
-        UserSettings.shared.pillSpectrumBarCount = originalSpectrumBarCount
         super.tearDown()
     }
 
@@ -67,34 +64,44 @@ final class CollapsedGeometryTests: XCTestCase {
         )
     }
 
-    /// Max bars at a narrow width slider: 32 bars can't fit in 74pt at the
-    /// 1pt minimum spacing, so the effective wave width must grow to the
-    /// bars' minimum content width (32 × 2 + 31 × 1 = 95) — otherwise the
-    /// wave overflows its frame and visually swallows the gap to the timer.
-    func testSpectrumOnlyMaxBarsWidensPillPastTheWidthSlider() {
+    /// The slider's value is snapped to a whole number of bars, so the pill is
+    /// exactly as wide as the run inside it — never a fractional bar wider,
+    /// which would show up as a gap next to the timer segment.
+    func testSpectrumOnlyPillIsExactlyAsWideAsItsBars() {
         UserSettings.shared.pillSpectrumOnly = true
-        UserSettings.shared.pillSpectrumWidth = 74
-        UserSettings.shared.pillSpectrumBarCount = 32
+        // Between 9 bars (30.8) and 10 bars (34.4), nearer the former.
+        UserSettings.shared.pillSpectrumWidth = 32
         let text = "12:34"
-        let minContent = 32 * NotchLayout.collapsedWaveBarWidth + 31 * NotchLayout.collapsedWaveSpacing
-        let expected = minContent
-            + NotchLayout.collapsedItemSpacing + timerSegmentWidth(text)
-            + endPadding
+        let run = NotchLayout.pillSpectrumWidth(forBarCount: 9)
+        XCTAssertEqual(NotchLayout.pillSpectrumBarCount(forWidth: 32), 9)
         XCTAssertEqual(
             viewModel.collapsedWidth(isPlaying: true, hasItems: false, timerText: text),
-            expected
+            run + NotchLayout.collapsedItemSpacing + timerSegmentWidth(text) + endPadding
         )
     }
 
-    /// A width slider above the bars' minimum stays authoritative.
-    func testSpectrumOnlyWideSliderKeepsItsWidth() {
-        UserSettings.shared.pillSpectrumOnly = true
-        UserSettings.shared.pillSpectrumWidth = 120
-        UserSettings.shared.pillSpectrumBarCount = 32
-        XCTAssertEqual(
-            viewModel.collapsedWidth(isPlaying: true, hasItems: false, timerText: nil),
-            120 + endPadding
-        )
+    /// Widening only adds bars — the gap between them never changes. That is
+    /// the whole point of collapsing the old width + bar-count pair into one
+    /// knob, and it is what keeps every slider position looking tuned.
+    func testWideningAddsBarsAtAConstantPitch() {
+        let narrow = NotchLayout.pillSpectrumBarCount(forWidth: NotchLayout.pillSpectrumMinWidth)
+        let wide = NotchLayout.pillSpectrumBarCount(forWidth: NotchLayout.pillSpectrumMaxWidth)
+        XCTAssertEqual(narrow, NotchLayout.pillSpectrumBarRange.lowerBound)
+        XCTAssertEqual(wide, NotchLayout.pillSpectrumBarRange.upperBound)
+        for count in NotchLayout.pillSpectrumBarRange {
+            let width = NotchLayout.pillSpectrumWidth(forBarCount: count)
+            XCTAssertEqual(NotchLayout.pillSpectrumBarCount(forWidth: Double(width)), count,
+                           "\(width) pt should hold exactly \(count) bars")
+            let bars = CGFloat(count) * NotchLayout.collapsedWaveBarWidth
+            XCTAssertEqual(width - bars, CGFloat(count - 1) * NotchLayout.collapsedWaveSpacing, accuracy: 0.001)
+        }
+    }
+
+    /// The default is Apple's own run, measured off a real Dynamic Island:
+    /// 6 bars, 20.0 pt end to end.
+    func testDefaultWidthIsApplesSixBarRun() {
+        XCTAssertEqual(NotchLayout.pillSpectrumBarCount(forWidth: NotchLayout.pillSpectrumDefaultWidth), 6)
+        XCTAssertEqual(NotchLayout.pillSpectrumDefaultWidth, 20.0, accuracy: 0.001)
     }
 
     // MARK: Shift
