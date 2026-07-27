@@ -65,6 +65,10 @@ final class NotchViewModel: ObservableObject {
             // very first collapse hop, and a later expand must re-earn it
             // via the controller's settle timer (see `pagesSettleDelay`).
             if islandState != .expanded { pagesSettled = false }
+            // Only a *closed* island resets the tab bar's entrance. On the way
+            // down it has to stay visible: the selected icon is what the pill's
+            // glyph is handed over from, and that handover is pixel-tuned.
+            if islandState == .collapsed { chromeRevealed = false }
         }
     }
 
@@ -72,7 +76,40 @@ final class NotchViewModel: ObservableObject {
     /// mounting the page carousel (the heaviest view-building moment).
     /// Set by the controller; cleared automatically whenever the island
     /// leaves `.expanded`.
-    @Published var pagesSettled = false
+    @Published var pagesSettled = false {
+        didSet {
+            guard pagesSettled != oldValue else { return }
+            guard pagesSettled else { spectrumWaveLanded = false; return }
+            // One runloop tick after the pages mount, so the spectrum page's
+            // wave draws its first frame back up at the pill's size and place
+            // and *then* travels down into the panel.
+            //
+            // This lives on the view model rather than in the page's own
+            // `onAppear` for a reason that cost two attempts to find: a state
+            // change made while a view is still being installed is folded into
+            // its insertion and animates not at all, so a wave that drove its
+            // own morph never moved however long the spring was.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.pagesSettled else { return }
+                withAnimation(NotchLayout.islandMorphAnimation) { self.spectrumWaveLanded = true }
+                // The tab bar is the last thing to arrive: the island opens, the
+                // wave travels into place, and only then does the chrome fade
+                // up around it. Showing all three at once made the wave read as
+                // arriving *behind* an interface that was already there.
+                DispatchQueue.main.asyncAfter(deadline: .now() + NotchLayout.chromeRevealDelay) { [weak self] in
+                    guard let self, self.pagesSettled else { return }
+                    withAnimation(NotchLayout.contentInsertAnimation) { self.chromeRevealed = true }
+                }
+            }
+        }
+    }
+
+    /// False while the spectrum page's wave is still "in flight" from the pill.
+    /// Drives the pill⇄page morph — see `SpectrumStageView.morphOrigin`.
+    @Published private(set) var spectrumWaveLanded = false
+
+    /// False until the wave has landed, so the tab bar enters last.
+    @Published private(set) var chromeRevealed = false
 
     /// The logical open/closed state — `.band` counts as closed (it's a
     /// transient stop on the way down; hover/gesture logic treats it like the

@@ -7,9 +7,9 @@ import SwiftUI
 /// This is the scalable form of the wave. `WaveBarsView` takes its geometry as
 /// parameters and draws through a single `Canvas`, so the only thing standing
 /// between the pill's 20 pt run and a screen-saver-sized one is deciding how
-/// many bars to draw and how thick — which is what this view does. Everything
-/// visual (colour derivation, the vertical gradient, the glow) is shared, so
-/// the big version can't drift away from the small one.
+/// many bars to draw and how thick — which is what `NotchLayout.stageWaveGeometry`
+/// does. Everything visual (colour derivation, the vertical gradient, the glow)
+/// is shared, so the big version can't drift away from the small one.
 struct SpectrumStageView: View {
     /// Live band levels, observed here and nowhere above, so a spectrum update
     /// redraws the bars and not the page around them (see `SpectrumBands`).
@@ -20,37 +20,31 @@ struct SpectrumStageView: View {
     var secondaryTint: Color?
     var tertiaryTint: Color?
     var coverBars: CoverBarPalette?
+    /// Where this run comes from — the size and place it starts at, so it
+    /// travels into position instead of appearing there. The pill for the
+    /// island's page; the island's page for the fullscreen stage. nil means
+    /// "just appear".
+    ///
+    /// Both numbers are worked out by the caller from `NotchLayout`, never from
+    /// this view's own `GeometryReader`: the reader reports a zero size on its
+    /// first pass, and a ratio taken from that put a nonsense scale on exactly
+    /// the frame the animation had to start from.
+    var morphOrigin: WaveMorphOrigin?
+    /// Hold the run at this many bars instead of deriving a count from the
+    /// available space. Used by the fullscreen stage so the wave that travels
+    /// up from the island keeps its identity — a count that changes mid-flight
+    /// re-buckets the spectrum on exactly the frames the eye is following.
+    var fixedBarCount: Int?
+    /// Whether the run has arrived. Owned by the caller, because a view cannot
+    /// reliably animate its own arrival: a state change made while the view is
+    /// still being installed is folded into the insertion and does not animate.
+    var landed: Bool = true
 
-    /// Never more than the analyzer actually resolves — past that the extra
-    /// bars are interpolation, not information.
-    private let maximumBars = 32
-    /// How tall a fully deflected bar is relative to its width. Without this
-    /// the stage just keeps the count and stretches: at 1280×720 a run of 32
-    /// bars is 22 pt wide and 700 tall, which reads as hairlines rather than
-    /// as the pill's wave made big. Tying thickness to the *height* instead
-    /// keeps the proportion at every size, and the width then decides how many
-    /// bars fit. (Apple's island is stubbier still, around 6 — that looks
-    /// sparse once a bar is the height of a hand.)
-    private let barAspectRatio: CGFloat = 12
-    /// Breathing room so the tallest bar and its glow don't touch the edges.
-    private let inset: CGFloat = 12
-
-    /// How many bars of roughly `height / barAspectRatio` fit across `width`,
-    /// keeping the fixed bar-to-gap ratio and the analyzer's resolution.
-    private func barCount(width: CGFloat, height: CGFloat) -> Int {
-        guard width > 0, height > 0 else { return 1 }
-        let target = max(1, height / barAspectRatio)
-        let pitch = target * (1 + NotchLayout.waveBarGapRatio)
-        let fits = Int(((width + target * NotchLayout.waveBarGapRatio) / pitch).rounded())
-        return max(1, min(maximumBars, fits))
-    }
+    private var origin: WaveMorphOrigin { landed ? .identity : (morphOrigin ?? .identity) }
 
     var body: some View {
         GeometryReader { geo in
-            let width = max(0, geo.size.width - inset * 2)
-            let height = max(0, geo.size.height - inset * 2)
-            let count = barCount(width: width, height: height)
-            let barWidth = NotchLayout.waveBarWidth(fitting: count, into: width)
+            let stage = NotchLayout.stageWaveGeometry(in: geo.size, barCount: fixedBarCount)
             WaveBarsView(
                 isActive: isActive,
                 tint: tint,
@@ -58,12 +52,23 @@ struct SpectrumStageView: View {
                 tertiaryTint: tertiaryTint,
                 coverBars: coverBars,
                 bands: isLive ? levels.values : nil,
-                count: count,
-                maxHeight: height,
-                barWidth: barWidth,
-                spacing: barWidth * NotchLayout.waveBarGapRatio
+                count: stage.barCount,
+                maxHeight: stage.waveHeight,
+                barWidth: stage.barWidth,
+                spacing: stage.spacing,
+                morphScale: origin.scale
             )
             .frame(width: geo.size.width, height: geo.size.height)
         }
+        .offset(y: origin.offsetY)
+        .animation(NotchLayout.islandMorphAnimation, value: origin)
     }
+}
+
+/// The size and place a wave starts from when it morphs into position.
+struct WaveMorphOrigin: Equatable {
+    var scale: CGFloat
+    var offsetY: CGFloat
+
+    static let identity = WaveMorphOrigin(scale: 1, offsetY: 0)
 }

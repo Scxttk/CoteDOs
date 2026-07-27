@@ -14,6 +14,11 @@ struct NotchRootView: View {
     /// Observed so `islandWidth` re-evaluates when the spectrum-only pill mode
     /// flips — the pill's width formula changes with it.
     @ObservedObject private var settings = UserSettings.shared
+    /// Observed so the island's own wave stands down while the fullscreen
+    /// takeover is up: it is completely covered by that window and would
+    /// otherwise keep redrawing 30 times a second behind it.
+    @ObservedObject private var fullscreen = SpectrumFullscreen.shared
+
 
     /// Run the audio tap whenever the screen is on, regardless of whether
     /// anything is playing — `spectrum.hasSignal` (derived from the tapped
@@ -104,6 +109,104 @@ struct NotchRootView: View {
         .onChange(of: nowPlaying.screensAwake) { _, _ in syncSpectrum() }
     }
 
+    // MARK: The wave that survives the morph
+
+    /// Whether the spectrum is currently drawn as one persistent object that
+    /// travels between the pill and the page.
+    ///
+    /// Only when the pill is *nothing but* the wave: with a timer readout or a
+    /// shelf badge beside it the run is no longer centred in the capsule, and
+    /// an overlay would have to re-derive an offset the `HStack` already owns.
+    /// Those cases keep the old crossfade, which is correct if less pretty.
+    private var morphingWaveActive: Bool {
+        settings.pillSpectrumOnly && hasAudioHero
+            && pomodoro.pillText == nil && shelf.items.isEmpty
+    }
+
+    /// Whether the travelling wave has anywhere to be right now.
+    ///
+    /// It follows whichever content owns the island: the pill's own stages, or
+    /// the spectrum page while the island is open on that tab. Everywhere else
+    /// it would be drawing at coordinates that belong to something else — the
+    /// two cases that produced real overlaps being an open island on another
+    /// tab, and the `.band` stage of a collapse, where the island is already
+    /// pill-height but the row still belongs to the tab bar. Both put the run
+    /// straight through the tab titles.
+    ///
+    /// Unmounted rather than hidden, so an invisible run cannot keep redrawing
+    /// itself 30 times a second — including underneath the fullscreen takeover,
+    /// which covers the island completely and has a wave of its own.
+    private var morphingWaveVisible: Bool {
+        guard morphingWaveActive, !fullscreen.isPresented else { return false }
+        switch viewModel.islandState {
+        case .collapsed, .solo, .condensing:
+            return true
+        case .expanded:
+            // Only for the flight itself. Once the pages are mounted the
+            // spectrum page draws the wave again, because the page lives in the
+            // carousel and therefore *slides* with it: an overlay stays centred
+            // in the island, so it painted itself over whichever page was
+            // sliding past, and left the spectrum page empty on the way out.
+            return viewModel.selectedTab == .spectrum && !viewModel.pagesSettled
+        case .band:
+            // The island is already pill-height here but this row still belongs
+            // to the tab bar; drawing the pill's wave now put it through the
+            // tab titles.
+            return false
+        }
+    }
+
+    /// The wave's resting geometry on the page, held at the pill's bar count so
+    /// the hand-over from the travelling overlay to the page's own wave is a
+    /// swap between two identical runs.
+    private var pageWaveBarCount: Int { pillWaveGeometry.barCount }
+
+    /// True once the wave belongs on the page rather than in the pill.
+    private var waveIsOnPage: Bool {
+        viewModel.islandState == .expanded && viewModel.selectedTab == .spectrum && viewModel.pagesSettled
+    }
+
+    private var pillWaveGeometry: NotchLayout.PillSpectrumGeometry {
+        NotchLayout.pillSpectrumGeometry(forWidth: settings.pillSpectrumWidth)
+    }
+
+    /// The wave's geometry and place, at whichever end it currently belongs to.
+    /// One view, two destinations — the animation between them is the morph.
+    private var morphingWave: some View {
+        let pill = pillWaveGeometry
+        let wave = waveIsOnPage
+            ? NotchLayout.spectrumPageWaveGeometry(barCount: pill.barCount)
+            : pill
+        let centreY = waveIsOnPage ? NotchLayout.pageWaveCentreY : NotchLayout.pillWaveCentreY
+        return LiveWaveBarsView(
+            levels: spectrum.bands,
+            isLive: spectrum.isLive,
+            isActive: nowPlaying.screensAwake,
+            tint: nowPlaying.track != nil ? nowPlaying.artworkColor : nil,
+            secondaryTint: nowPlaying.track != nil ? nowPlaying.artworkSecondaryColor : nil,
+            tertiaryTint: nowPlaying.track != nil ? nowPlaying.artworkTertiaryColor : nil,
+            coverBars: nowPlaying.track != nil ? nowPlaying.coverBars : nil,
+            count: wave.barCount,
+            maxHeight: wave.waveHeight,
+            barWidth: wave.barWidth,
+            spacing: wave.spacing
+        )
+        .frame(width: wave.runWidth, height: wave.frameHeight)
+        .offset(y: centreY - wave.frameHeight / 2)
+        .animation(NotchLayout.islandMorphAnimation, value: waveIsOnPage)
+        .allowsHitTesting(false)
+        // Wait for the outgoing tab bar the same way the pill's own content
+        // does (`heroCrossfadeInsertDelay` exists precisely so the wave does
+        // not sit on top of the solo tab's icon and label for a quarter of a
+        // second); leave immediately, so it never lingers over a narrowing
+        // capsule.
+        .transition(.asymmetric(
+            insertion: .opacity.animation(
+                NotchLayout.condenseFadeAnimation.delay(NotchLayout.heroCrossfadeInsertDelay)),
+            removal: .opacity.animation(NotchLayout.condenseFadeAnimation)
+        ))
+    }
+
     private var island: some View {
         let cornerRadius = viewModel.isExpanded ? NotchLayout.expandedCornerRadius : viewModel.collapsedHeight / 2
         let shape = IslandShape(cornerRadius: cornerRadius)
@@ -154,9 +257,18 @@ struct NotchRootView: View {
 
         return chrome
             .overlay(
-                content
-                    .frame(width: islandWidth, height: islandHeight, alignment: .top)
-                    .clipShape(shape)
+                ZStack(alignment: .top) {
+                    content
+                    // The spectrum lives *above* the island's content rather
+                    // than inside it, so that opening the island moves one wave
+                    // instead of dissolving the pill's into the page's. Nothing
+                    // else can do that: the pill and the page are different
+                    // subtrees mounted at different moments, so any wave owned
+                    // by either of them has to fade when its owner does.
+                    if morphingWaveVisible { morphingWave }
+                }
+                .frame(width: islandWidth, height: islandHeight, alignment: .top)
+                .clipShape(shape)
             )
             .frame(width: islandWidth, height: islandHeight)
             .offset(x: islandXOffset)
@@ -196,7 +308,7 @@ struct NotchRootView: View {
                 // tabs, then labels), so nothing ever re-appears. By the time
                 // it unmounts only the selected icon is left — pixel-identical
                 // to the pill icon replacing it (idle case).
-                ExpandedView(viewModel: viewModel, nowPlaying: nowPlaying, shelf: shelf, pomodoro: pomodoro, capture: capture, spectrum: spectrum, claudeUsage: claudeUsage, claudeDriver: claudeDriver)
+                ExpandedView(viewModel: viewModel, nowPlaying: nowPlaying, shelf: shelf, pomodoro: pomodoro, capture: capture, spectrum: spectrum, claudeUsage: claudeUsage, claudeDriver: claudeDriver, spectrumWaveDrawnByOverlay: morphingWaveVisible, spectrumWaveBarCount: morphingWaveActive ? pageWaveBarCount : nil)
                     .transition(handover)
             }
             if state == .collapsed || pillHero {
@@ -209,7 +321,7 @@ struct NotchRootView: View {
                     // → collapsed when playing (one persistent view, so only the
                     // capsule shrinks around it — no swap), or just at collapsed
                     // when idle.
-                    CollapsedView(viewModel: viewModel, nowPlaying: nowPlaying, shelf: shelf, pomodoro: pomodoro, spectrum: spectrum, hasAudioHero: hasAudioHero)
+                    CollapsedView(viewModel: viewModel, nowPlaying: nowPlaying, shelf: shelf, pomodoro: pomodoro, spectrum: spectrum, hasAudioHero: hasAudioHero, waveDrawnByOverlay: morphingWaveActive)
                         .foregroundStyle(.white)
                         .transition(handover)
                 }
@@ -344,6 +456,14 @@ private struct ExpandedView: View {
     @ObservedObject var spectrum: SpectrumAnalyzer
     @ObservedObject var claudeUsage: ClaudeUsageModel
     @ObservedObject var claudeDriver: ClaudeSessionDriver
+    /// True while `NotchRootView` is drawing the spectrum itself, above this
+    /// view, so it can travel in from the pill as one object — the page then
+    /// leaves a hole exactly where the wave will land, and takes it back over
+    /// once the flight is done.
+    var spectrumWaveDrawnByOverlay: Bool = false
+    /// Bar count the page's wave must hold so that taking over from the
+    /// travelling one is invisible. nil → the page resolves its own.
+    var spectrumWaveBarCount: Int?
 
     private var pageIndex: Int {
         NotchViewModel.Tab.allCases.firstIndex(of: viewModel.selectedTab) ?? 0
@@ -380,6 +500,19 @@ private struct ExpandedView: View {
             )
             .frame(maxWidth: .infinity)
             .frame(height: NotchLayout.currentCollapsedHeight)
+            // Last beat of the opening: the island widens, the wave travels
+            // into it, and the chrome fades up around them (see
+            // `NotchViewModel.chromeRevealed`). Opacity only — the row keeps
+            // its layout throughout, so nothing below it shifts.
+            //
+            // `.band` counts as part of the opening, not as a state that shows
+            // chrome: the expand walk always rests there first, so treating it
+            // as "not expanded" made the row appear, blink out on reaching
+            // `.expanded`, and fade back in — the opposite of the intended
+            // order. On the way *down* `chromeRevealed` is still true, so the
+            // row stays opaque for the pill's icon handover.
+            .opacity(viewModel.chromeRevealed || viewModel.islandState == .solo
+                     || viewModel.islandState == .condensing || viewModel.islandState == .collapsed ? 1 : 0)
 
             // All three pages live in a carousel that slides as one strip. Unlike
             // insertion/removal transitions this can't get the direction wrong on
@@ -393,6 +526,14 @@ private struct ExpandedView: View {
                             // The whole page is the wave. Colours follow the
                             // playing track when there is one; system audio
                             // with no scriptable track just gets the default.
+                            //
+                            // Unless the wave is the one travelling in from the
+                            // pill, in which case it is drawn above this page
+                            // and the page itself is only the tap target that
+                            // hands it the whole screen.
+                            if spectrumWaveDrawnByOverlay {
+                                Color.clear
+                            } else {
                             SpectrumStageView(
                                 levels: spectrum.bands,
                                 isLive: spectrum.isLive,
@@ -400,8 +541,10 @@ private struct ExpandedView: View {
                                 tint: nowPlaying.track != nil ? nowPlaying.artworkColor : nil,
                                 secondaryTint: nowPlaying.track != nil ? nowPlaying.artworkSecondaryColor : nil,
                                 tertiaryTint: nowPlaying.track != nil ? nowPlaying.artworkTertiaryColor : nil,
-                                coverBars: nowPlaying.track != nil ? nowPlaying.coverBars : nil
+                                coverBars: nowPlaying.track != nil ? nowPlaying.coverBars : nil,
+                                fixedBarCount: spectrumWaveBarCount
                             )
+                            }
                         }
                         page(.files, in: geo.size) { ShelfView(shelf: shelf) }
                         page(.capture, in: geo.size) { CaptureView(capture: capture, viewModel: viewModel) }
@@ -499,12 +642,25 @@ private struct NotchTabBar: View {
     /// Observed so the bar re-renders live when tabs are toggled in Settings.
     @ObservedObject private var settings = UserSettings.shared
 
+    /// Shrinks the full row when the enabled tabs would overflow the island —
+    /// only ever in the states that show all of them. Solo and condensing keep
+    /// scale 1, because their metrics are tuned to hand the selected icon over
+    /// to the pill glyph pixel for pixel; animating back to 1 as the row goes
+    /// solo also brings that icon up to its final size just in time.
+    private var fitScale: CGFloat {
+        guard showsAllTabs else { return 1 }
+        return NotchLayout.tabBarFitScale(titles: NotchViewModel.enabledTabs.map(\.title))
+    }
+
     var body: some View {
+        let scale = fitScale
         HStack(spacing: NotchLayout.tabBarSpacing) {
             ForEach(NotchViewModel.enabledTabs, id: \.self) { value in
                 tab(title: value.title, value: value)
             }
         }
+        .scaleEffect(scale)
+        .animation(NotchLayout.condenseFadeAnimation, value: scale)
     }
 
     @ViewBuilder
@@ -574,6 +730,11 @@ private struct CollapsedView: View {
     /// true for Spotify/Music, but also for any other system audio (browser
     /// video, calls, …) that has no scriptable track to show a cover for.
     let hasAudioHero: Bool
+    /// True when `NotchRootView` draws the spectrum above the island so it can
+    /// travel to the page as one object. The pill then reserves the run's space
+    /// but leaves it empty — the width estimate in `collapsedWidth` still has to
+    /// hold, or the capsule clips against its own silhouette.
+    var waveDrawnByOverlay: Bool = false
 
     /// Cached icon for `spectrum.sourceBundleID`, resolved once per bundle ID
     /// change rather than on every wave-bar redraw.
@@ -637,29 +798,39 @@ private struct CollapsedView: View {
                 if settings.pillSpectrumOnly {
                     // Spectrum-only mode: no thumbnail at all (neither cover
                     // nor source-app icon — "only the spectrum" holds for both
-                    // kinds of audio), just a wider, taller wave across the
-                    // space the thumbnail freed up. Bar count and wave width
-                    // are user-tunable; the bars spread evenly across the
-                    // width, so fewer bars simply means wider gaps.
-                    // Fixed bar width and gap; the slider only decides how many
-                    // bars there are. See `NotchLayout.pillSpectrumSnappedWidth`.
-                    let barCount = NotchLayout.pillSpectrumBarCount(forWidth: settings.pillSpectrumWidth)
-                    let waveWidth = NotchLayout.pillSpectrumWidth(forBarCount: barCount)
-                    LiveWaveBarsView(
-                        levels: spectrum.bands,
-                        isLive: spectrum.isLive,
-                        isActive: nowPlaying.screensAwake,
-                        tint: waveTint,
-                        secondaryTint: showsTrackArtwork ? nowPlaying.artworkSecondaryColor : nil,
-                        tertiaryTint: showsTrackArtwork ? nowPlaying.artworkTertiaryColor : nil,
-                        coverBars: showsTrackArtwork ? nowPlaying.coverBars : nil,
-                        count: barCount,
-                        maxHeight: NotchLayout.collapsedWideWaveMaxHeight,
-                        barWidth: NotchLayout.collapsedWaveBarWidth,
-                        spacing: NotchLayout.collapsedWaveSpacing
-                    )
-                    .frame(width: waveWidth, height: NotchLayout.collapsedWideWaveFrameHeight)
-                    .transition(.opacity.combined(with: .scale(scale: 0.85)))
+                    // kinds of audio), just the wave in the space the
+                    // thumbnail freed up.
+                    //
+                    // Geometry is the spectrum *page* scaled down — one rule,
+                    // one knob: the field keeps the page's aspect, so widening
+                    // the pill also makes it taller and its bars thicker, and
+                    // the run holds however many of those fit. That is why
+                    // this reads like the page instead of like a stripe of
+                    // hairlines. See `NotchLayout.pillSpectrumGeometry`.
+                    let wave = NotchLayout.pillSpectrumGeometry(forWidth: settings.pillSpectrumWidth)
+                    if waveDrawnByOverlay {
+                        // The run itself is drawn above the island so it can
+                        // travel to the page without ever unmounting; the pill
+                        // only reserves its space here.
+                        Color.clear
+                            .frame(width: wave.runWidth, height: wave.frameHeight)
+                    } else {
+                        LiveWaveBarsView(
+                            levels: spectrum.bands,
+                            isLive: spectrum.isLive,
+                            isActive: nowPlaying.screensAwake,
+                            tint: waveTint,
+                            secondaryTint: showsTrackArtwork ? nowPlaying.artworkSecondaryColor : nil,
+                            tertiaryTint: showsTrackArtwork ? nowPlaying.artworkTertiaryColor : nil,
+                            coverBars: showsTrackArtwork ? nowPlaying.coverBars : nil,
+                            count: wave.barCount,
+                            maxHeight: wave.waveHeight,
+                            barWidth: wave.barWidth,
+                            spacing: wave.spacing
+                        )
+                        .frame(width: wave.runWidth, height: wave.frameHeight)
+                        .transition(.opacity.combined(with: .scale(scale: 0.85)))
+                    }
                 } else if showsTrackArtwork, let url = nowPlaying.track?.artworkURL {
                     // Fade the new cover in (transaction animation) over a placeholder
                     // tinted to the track's accent colour rather than flat grey, so a

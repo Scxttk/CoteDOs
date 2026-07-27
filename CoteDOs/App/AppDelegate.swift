@@ -5,6 +5,9 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: NotchWindowController?
     private var statusBarController: StatusBarController?
+    /// Owns the fullscreen-spectrum window. Created at launch but idle until
+    /// something asks for the takeover (a tap on the spectrum page, or ⌥⌘S).
+    private var spectrumFullscreen: SpectrumFullscreenController?
 
     let viewModel = NotchViewModel()
     let nowPlaying = NowPlayingManager()
@@ -49,6 +52,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         capture.onHotKey = { [weak self] in self?.windowController?.presentCapture() }
         capture.start()
+
+        spectrumFullscreen = SpectrumFullscreenController(spectrum: spectrum, nowPlaying: nowPlaying)
+        // ⌥⌘S toggles the fullscreen spectrum from anywhere, so it can be put up
+        // (and taken down) without going through the island first.
+        HotKeyCenter.shared.register(.spectrumFullscreen) {
+            SpectrumFullscreen.shared.toggle()
+        }
 
         nowPlaying.start()
         activities.start()

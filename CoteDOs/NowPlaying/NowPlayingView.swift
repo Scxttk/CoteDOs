@@ -328,6 +328,8 @@ struct LiveWaveBarsView: View {
     var maxHeight: CGFloat = 26
     var barWidth: CGFloat = 3
     var spacing: CGFloat = 3
+    /// See `WaveBarsView.morphScale`.
+    var morphScale: CGFloat = 1
 
     var body: some View {
         WaveBarsView(
@@ -340,7 +342,8 @@ struct LiveWaveBarsView: View {
             count: count,
             maxHeight: maxHeight,
             barWidth: barWidth,
-            spacing: spacing
+            spacing: spacing,
+            morphScale: morphScale
         )
     }
 }
@@ -356,6 +359,9 @@ private struct BarInk {
     let baseHSB: HSB
     /// What the bar's top-to-bottom gradient ends on.
     let foot: Color
+    /// The foot decomposed, so `WaveCanvas` can pull it back toward the base on
+    /// bars far taller than the ones the drain was measured on.
+    let footHSB: HSB
 
     /// Depth, in the direction Apple's own bars run. A bar on a real iPhone's
     /// Dynamic Island travels from S 0.59 / B 0.60 at its tip to S 0.32 /
@@ -369,17 +375,21 @@ private struct BarInk {
 
     init(_ color: Color) {
         let hsb = HSB(color)
+        let drained = hsb.scaledHSB(saturation: Self.footSaturation, brightness: Self.footBrightness)
         self.base = color
         self.baseHSB = hsb
-        self.foot = hsb.scaled(saturation: Self.footSaturation, brightness: Self.footBrightness)
+        self.foot = drained.color
+        self.footHSB = drained
     }
 
     /// For styles that *derive* the colour and therefore already know its
     /// components — no decomposition needed at all.
     init(hsb: HSB) {
+        let drained = hsb.scaledHSB(saturation: Self.footSaturation, brightness: Self.footBrightness)
         self.base = hsb.color
         self.baseHSB = hsb
-        self.foot = hsb.scaled(saturation: Self.footSaturation, brightness: Self.footBrightness)
+        self.foot = drained.color
+        self.footHSB = drained
     }
 
     /// The `.coverImage` style: the quantised cover column, whose shading was
@@ -388,6 +398,7 @@ private struct BarInk {
         self.base = coverBar.top
         self.baseHSB = coverBar.topHSB
         self.foot = coverBar.foot
+        self.footHSB = HSB(coverBar.foot)
     }
 }
 
@@ -424,6 +435,48 @@ private struct BarLevels: VectorArithmetic {
     }
 }
 
+/// The wave's *dimensions* as one interpolatable quantity, so a change of size
+/// morphs instead of cutting.
+///
+/// These used to be plain `let`s on `WaveCanvas`, which meant only the bar
+/// heights could animate — the run's thickness, gaps and vertical range
+/// changed in a single frame. That was invisible while every wave had a fixed
+/// size, and became the thing standing between the pill and the spectrum page
+/// once both derived their geometry from one rule: the two are the same wave at
+/// two scales, so growing from one into the other is a pure interpolation of
+/// this struct.
+private struct WaveMetrics: VectorArithmetic {
+    var barWidth: CGFloat
+    var spacing: CGFloat
+    var maxHeight: CGFloat
+    var floorHeight: CGFloat
+
+    static var zero: WaveMetrics { WaveMetrics(barWidth: 0, spacing: 0, maxHeight: 0, floorHeight: 0) }
+
+    static func + (lhs: WaveMetrics, rhs: WaveMetrics) -> WaveMetrics { combine(lhs, rhs, +) }
+    static func - (lhs: WaveMetrics, rhs: WaveMetrics) -> WaveMetrics { combine(lhs, rhs, -) }
+
+    private static func combine(_ lhs: WaveMetrics, _ rhs: WaveMetrics,
+                                _ op: (CGFloat, CGFloat) -> CGFloat) -> WaveMetrics {
+        WaveMetrics(barWidth: op(lhs.barWidth, rhs.barWidth),
+                    spacing: op(lhs.spacing, rhs.spacing),
+                    maxHeight: op(lhs.maxHeight, rhs.maxHeight),
+                    floorHeight: op(lhs.floorHeight, rhs.floorHeight))
+    }
+
+    mutating func scale(by rhs: Double) {
+        let f = CGFloat(rhs)
+        barWidth *= f
+        spacing *= f
+        maxHeight *= f
+        floorHeight *= f
+    }
+
+    var magnitudeSquared: Double {
+        Double(barWidth * barWidth + spacing * spacing + maxHeight * maxHeight + floorHeight * floorHeight)
+    }
+}
+
 /// The whole wave, drawn in a single pass.
 ///
 /// This used to be an `HStack` of `Capsule` views — one SwiftUI view per bar,
@@ -442,10 +495,13 @@ private struct WaveCanvas: View, Animatable {
     /// rather than crossfading, which is the one thing lost by leaving the
     /// view-per-bar layout behind.
     let inks: [BarInk]
-    let maxHeight: CGFloat
-    let barWidth: CGFloat
-    let spacing: CGFloat
-    let floorHeight: CGFloat
+    /// The run's dimensions. Deliberately *not* part of `animatableData`: the
+    /// levels re-animate 30×/s with their own 0.09 s ease, and when both shared
+    /// one animatable value that ease restarted the size interpolation on every
+    /// spectrum update — collapsing a 0.4 s morph into 0.09 s (invisible) and
+    /// making the motion itself jittery. Resizing is animated one level up
+    /// instead, as a transform (see `WaveBarsView.morphScale`).
+    let metrics: WaveMetrics
 
     var animatableData: BarLevels {
         get { levels }
@@ -456,11 +512,13 @@ private struct WaveCanvas: View, Animatable {
         Canvas(opaque: false, rendersAsynchronously: false) { context, size in
             let total = min(levels.values.count, inks.count)
             guard total > 0 else { return }
+            let barWidth = max(0, metrics.barWidth)
+            let spacing = max(0, metrics.spacing)
             let runWidth = CGFloat(total) * barWidth + CGFloat(total - 1) * spacing
             var x = (size.width - runWidth) / 2
             for i in 0..<total {
                 let level = max(0, min(1, levels.values[i]))
-                let height = max(floorHeight, maxHeight * level * Self.envelope(at: i, total: total))
+                let height = max(metrics.floorHeight, metrics.maxHeight * level * Self.envelope(at: i, total: total))
                 let rect = CGRect(x: x, y: (size.height - height) / 2, width: barWidth, height: height)
                 draw(&context, rect: rect, level: level, ink: inks[i])
                 x += barWidth + spacing
@@ -479,13 +537,39 @@ private struct WaveCanvas: View, Animatable {
     /// the run, so the floor eases back up to 0.45 there. The exponent
     /// steepens for small counts for the same reason: with 6 bars every bar
     /// *is* the curve.
+    /// At wide counts the envelope all but disappears (floor 0.75): with 32
+    /// bars there is no bucketing, so an imposed crest was the one thing
+    /// still masking the music — the stage view proved the same data reads
+    /// far livelier without it. Small counts keep the deep Apple-style dip.
     static func envelope(at index: Int, total: Int) -> CGFloat {
         guard total > 1 else { return 1 }
         let spread = min(1, max(0, CGFloat(total - 6) / 10))   // 0 at ≤6 bars, 1 at ≥16
-        let floor = 0.16 + (0.45 - 0.16) * spread
-        let exponent = 0.8 - 0.2 * spread
+        let floor = 0.16 + (0.75 - 0.16) * spread
+        let exponent = 0.8 - 0.3 * spread
         let t = CGFloat(index) / CGFloat(total - 1)
         return floor + (1 - floor) * pow(sin(.pi * t), exponent)
+    }
+
+    /// Ceiling for the per-bar glow. Reached only well beyond page size — the
+    /// pill's widest bar glows at ~6 pt, the page's at ~13 pt.
+    private static let maximumGlowRadius: CGFloat = 16
+
+    /// Tallest bar the measured foot drain applies to in full. Apple's island
+    /// bars top out around 13 pt and the spectrum page's around 126, and the
+    /// drain reads as depth at both — but it is a *proportional* gradient, so
+    /// on a fullscreen bar of 400+ pt the desaturated end owns most of the
+    /// shape and the whole wave goes pale. Past this height the foot is pulled
+    /// back toward the bar's own colour.
+    private static let fullDrainBarHeight: CGFloat = 130
+    /// How much drain survives at any size, so big bars keep some depth.
+    private static let minimumDrain: CGFloat = 0.35
+
+    /// The colour a bar's gradient ends on, held back on bars taller than the
+    /// drain was measured for.
+    private static func foot(of ink: BarInk, barHeight: CGFloat) -> Color {
+        guard barHeight > fullDrainBarHeight else { return ink.foot }
+        let drain = max(minimumDrain, fullDrainBarHeight / barHeight)
+        return ink.baseHSB.mixed(to: ink.footHSB, t: Double(drain)).color
     }
 
     private func draw(_ context: inout GraphicsContext, rect: CGRect, level: CGFloat, ink: BarInk) {
@@ -504,12 +588,19 @@ private struct WaveCanvas: View, Animatable {
         // Glow radius scales with the bar's own width: a fixed 1–4.5 pt halo
         // was sized for 3 pt panel bars and swallowed the 2 pt pill bars whole,
         // bleeding into their neighbours and flattening the wave's shape.
-        layer.addFilter(.shadow(color: ink.base.opacity(0.35 + 0.45 * level),
-                                radius: rect.width * (0.5 + 1.2 * level)))
+        //
+        // Capped in absolute terms because the same wave now also runs
+        // fullscreen, where bars are ~100 pt wide: a blur radius that kept
+        // scaling would be a ~100 pt gaussian on every bar of every frame, which
+        // is a lot of pixels to throw away on a halo nobody can see the edge of.
+        // The cap is far above anything the pill or the page reaches, so their
+        // look is untouched.
+        let glow = min(Self.maximumGlowRadius, rect.width * (0.4 + 0.9 * level))
+        layer.addFilter(.shadow(color: ink.base.opacity(0.35 + 0.45 * level), radius: glow))
         layer.fill(
             capsule,
             with: .linearGradient(
-                Gradient(colors: [ink.base, ink.foot]),
+                Gradient(colors: [ink.base, Self.foot(of: ink, barHeight: rect.height)]),
                 startPoint: CGPoint(x: rect.midX, y: rect.minY),
                 endPoint: CGPoint(x: rect.midX, y: rect.maxY)
             )
@@ -539,6 +630,11 @@ struct WaveBarsView: View {
     var maxHeight: CGFloat = 26
     var barWidth: CGFloat = 3
     var spacing: CGFloat = 3
+    /// Size the run is drawn at relative to its own geometry, for the pill⇄page
+    /// morph: the caller holds this away from 1 for the first frame after the
+    /// wave appears and the spring carries it home. 1 means no morph is running,
+    /// which is every wave that isn't mid-transition.
+    var morphScale: CGFloat = 1
     @ObservedObject private var settings = UserSettings.shared
     /// Decides whether the bars ease between updates — see the `body` comment.
     @ObservedObject private var power = PowerSource.shared
@@ -640,7 +736,11 @@ struct WaveBarsView: View {
     /// iOS's spectrum bars never fully bottom out — even a silent band keeps a
     /// visible sliver. Ours read as flatter than that; nudge the hard floor up
     /// a touch (was 3) so the quietest bar still reads as "there".
-    private var floorHeight: CGFloat { max(4, maxHeight * 0.14) }
+    /// Proportional, with only a hairline clamp (was `max(4, …)`): a 4 pt
+    /// floor on the pill's short bars swallowed 22% of the run's height —
+    /// the stage view's floor is 14% and its extra headroom is exactly what
+    /// makes the same data read livelier there.
+    private var floorHeight: CGFloat { max(2, maxHeight * 0.14) }
 
     /// Fit the source bands to `count` bars: pass through when they match, else
     /// group into `count` buckets. Each bucket blends its max with its mean:
@@ -662,15 +762,12 @@ struct WaveBarsView: View {
         }
     }
 
+    private var metrics: WaveMetrics {
+        WaveMetrics(barWidth: barWidth, spacing: spacing, maxHeight: maxHeight, floorHeight: floorHeight)
+    }
+
     private func wave(levels: [CGFloat], inks: [BarInk]) -> WaveCanvas {
-        WaveCanvas(
-            levels: BarLevels(values: levels),
-            inks: inks,
-            maxHeight: maxHeight,
-            barWidth: barWidth,
-            spacing: spacing,
-            floorHeight: floorHeight
-        )
+        WaveCanvas(levels: BarLevels(values: levels), inks: inks, metrics: metrics)
     }
 
     @ViewBuilder
@@ -696,6 +793,13 @@ struct WaveBarsView: View {
             wave(levels: values, inks: palette(total: values.count))
                 .frame(maxHeight: .infinity, alignment: .center)
                 .animation(power.isOnBattery ? nil : .easeOut(duration: 0.09), value: values)
+                // The pill⇄page morph, as a transform rather than a redraw: the
+                // two ends are the same wave at two scales, so scaling *is* the
+                // interpolation — and unlike animating the canvas's geometry it
+                // cannot be restarted by the levels' ease, which is what kept
+                // the morph from ever being visible.
+                .scaleEffect(morphScale)
+                .animation(NotchLayout.islandMorphAnimation, value: morphScale)
         } else {
             // Hoisted out of the timeline closure on purpose: the colours don't
             // depend on the clock, so they're resolved once per update instead

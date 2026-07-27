@@ -851,7 +851,14 @@ final class NotchWindowController {
         // Vertical swipe -> expand / collapse.
         guard abs(dy) > threshold, abs(dy) > abs(dx) else { return false }
         if dy > 0 {
-            expandViaGesture()
+            // One axis, three sizes: down goes bigger each time. Already open on
+            // the spectrum tab, the next swipe down hands it the whole screen
+            // (swiping up there brings it back — see `SpectrumFullscreenController`).
+            if viewModel.isExpanded, viewModel.selectedTab == .spectrum {
+                SpectrumFullscreen.shared.present()
+            } else {
+                expandViaGesture()
+            }
         } else {
             collapseViaGesture()
         }

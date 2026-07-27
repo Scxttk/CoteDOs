@@ -43,22 +43,25 @@ final class WaveBarsSnapshotTests: XCTestCase {
         let secondary = Color(hue: 0.50, saturation: 0.65, brightness: 0.75)
         let tertiary = Color(hue: 0.10, saturation: 0.80, brightness: 0.90)
 
+        // The spectrum-only pill at the widest setting — the layout the styles
+        // are actually judged in.
+        let geometry = NotchLayout.pillSpectrumGeometry(forWidth: NotchLayout.pillSpectrumMaxWidth)
+
         for style in UserSettings.SpectrumStyle.allCases {
             settings.spectrumStyle = style
 
-            // The wide spectrum-only pill layout (16 bars, 48×20 frame).
             let wave = WaveBarsView(
                 isActive: true,
                 tint: tint,
                 secondaryTint: secondary,
                 tertiaryTint: tertiary,
                 bands: bands,
-                count: NotchLayout.collapsedWideWaveBarCount,
-                maxHeight: NotchLayout.collapsedWideWaveMaxHeight,
-                barWidth: NotchLayout.collapsedWaveBarWidth,
-                spacing: NotchLayout.collapsedWaveSpacing
+                count: geometry.barCount,
+                maxHeight: geometry.waveHeight,
+                barWidth: geometry.barWidth,
+                spacing: geometry.spacing
             )
-            .frame(width: NotchLayout.collapsedWideWavesWidth, height: NotchLayout.collapsedWideWaveFrameHeight)
+            .frame(width: geometry.runWidth, height: geometry.frameHeight)
             .padding(14)
             .background(Color.black)
 
@@ -97,27 +100,31 @@ final class WaveBarsSnapshotTests: XCTestCase {
             return 0.25 + 0.55 * abs(sin(.pi * t * 3.1 + 0.4)) + (i % 5 == 2 ? 0.2 : 0)
         }.map { min(1, $0) }
 
-        for count in [6, 32] {
+        // Both ends of the one knob, at the geometry the pill actually renders:
+        // the Apple-matched narrow default, and the widest setting — which is
+        // the page's proportions in miniature.
+        for width in [NotchLayout.pillSpectrumDefaultWidth, NotchLayout.pillSpectrumMaxWidth] {
+            let geometry = NotchLayout.pillSpectrumGeometry(forWidth: width)
             let wave = WaveBarsView(
                 isActive: true,
                 tint: Color(hue: 0.97, saturation: 0.75, brightness: 0.85),
                 secondaryTint: Color(hue: 0.50, saturation: 0.65, brightness: 0.75),
                 bands: fullBands,
-                count: count,
-                maxHeight: NotchLayout.collapsedWideWaveMaxHeight,
-                barWidth: NotchLayout.collapsedWaveBarWidth,
-                spacing: NotchLayout.collapsedWaveSpacing
+                count: geometry.barCount,
+                maxHeight: geometry.waveHeight,
+                barWidth: geometry.barWidth,
+                spacing: geometry.spacing
             )
-            .frame(width: NotchLayout.pillSpectrumWidth(forBarCount: count), height: NotchLayout.collapsedWideWaveFrameHeight)
+            .frame(width: geometry.runWidth, height: geometry.frameHeight)
             .padding(14)
             .background(Color.black)
 
             let renderer = ImageRenderer(content: wave)
             renderer.scale = 8
-            let image = try XCTUnwrap(renderer.cgImage, "pill wave failed to render at \(count) bars")
+            let image = try XCTUnwrap(renderer.cgImage, "pill wave failed to render at \(geometry.barCount) bars")
             let rep = NSBitmapImageRep(cgImage: image)
             let png = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
-            try png.write(to: Self.outputDirectory.appendingPathComponent("pill-spectrum-\(count).png"))
+            try png.write(to: Self.outputDirectory.appendingPathComponent("pill-spectrum-\(geometry.barCount).png"))
         }
     }
 
@@ -152,18 +159,19 @@ final class WaveBarsSnapshotTests: XCTestCase {
 
         try FileManager.default.createDirectory(at: Self.outputDirectory, withIntermediateDirectories: true)
 
-        let count = NotchLayout.collapsedWideWaveBarCount
+        let geometry = NotchLayout.pillSpectrumGeometry(forWidth: NotchLayout.pillSpectrumMaxWidth)
+        let count = geometry.barCount
         let wave = WaveBarsView(
             isActive: true,
             tint: Color(hue: 0.08, saturation: 0.80, brightness: 0.90),
             coverBars: coverPalette(count: count),
             bands: bands,
             count: count,
-            maxHeight: NotchLayout.collapsedWideWaveMaxHeight,
-            barWidth: NotchLayout.collapsedWaveBarWidth,
-            spacing: NotchLayout.collapsedWaveSpacing
+            maxHeight: geometry.waveHeight,
+            barWidth: geometry.barWidth,
+            spacing: geometry.spacing
         )
-        .frame(width: NotchLayout.collapsedWideWavesWidth, height: NotchLayout.collapsedWideWaveFrameHeight)
+        .frame(width: geometry.runWidth, height: geometry.frameHeight)
         .padding(14)
         .background(Color.black)
 

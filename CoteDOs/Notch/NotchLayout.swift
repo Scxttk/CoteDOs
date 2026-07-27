@@ -79,23 +79,28 @@ enum NotchLayout {
     /// Narrowest and widest the run may get, in bars.
     static let pillSpectrumBarRange = 4...32
 
-    /// Exact width of a run of `count` bars — no trailing gap.
+    /// Exact width of a run of `count` bars at the Apple raster (2.0 pt bars,
+    /// 1.6 pt gaps) — no trailing gap. This is the scale the *slider* is
+    /// calibrated in (its default, minimum and maximum); the rendered run
+    /// derives its own thickness from the field height, and the two agree
+    /// exactly at the narrow end. See `pillSpectrumWaveHeightRange`.
     static func pillSpectrumWidth(forBarCount count: Int) -> CGFloat {
         let n = max(1, count)
         return CGFloat(n) * collapsedWaveBarWidth + CGFloat(n - 1) * collapsedWaveSpacing
     }
 
-    /// How many bars fit a requested width, clamped to `pillSpectrumBarRange`.
+    /// How many bars a requested width holds. Delegates to
+    /// `pillSpectrumGeometry(forWidth:)` so the count, the bar thickness and
+    /// the pill's own height can never be derived from different rules.
     static func pillSpectrumBarCount(forWidth width: Double) -> Int {
-        let raw = (CGFloat(width) + collapsedWaveSpacing) / pillSpectrumBarPitch
-        return min(max(Int(raw.rounded()), pillSpectrumBarRange.lowerBound), pillSpectrumBarRange.upperBound)
+        pillSpectrumGeometry(forWidth: width).barCount
     }
 
     /// The requested width snapped to a whole number of bars. The view and the
     /// width estimate in `NotchViewModel.collapsedWidth` both read this, so the
     /// pill is always exactly as wide as the run inside it.
     static func pillSpectrumSnappedWidth(_ requestedWidth: Double) -> CGFloat {
-        pillSpectrumWidth(forBarCount: pillSpectrumBarCount(forWidth: requestedWidth))
+        pillSpectrumGeometry(forWidth: requestedWidth).runWidth
     }
 
     /// Apple's own run, measured: 6 bars, 20.0 pt end to end. That is the
@@ -104,21 +109,208 @@ enum NotchLayout {
     static var pillSpectrumMinWidth: Double { Double(pillSpectrumWidth(forBarCount: pillSpectrumBarRange.lowerBound)) }
     static var pillSpectrumMaxWidth: Double { Double(pillSpectrumWidth(forBarCount: pillSpectrumBarRange.upperBound)) }
     static let collapsedWideWaveBarCount: Int = 16
-    static let collapsedWideWaveMaxHeight: CGFloat = 18
     /// Derived, not typed in: the bar pitch is fixed now, so a hardcoded width
     /// would silently mis-frame the run the moment the gap is retuned.
     static var collapsedWideWavesWidth: CGFloat { pillSpectrumWidth(forBarCount: collapsedWideWaveBarCount) }
-    static let collapsedWideWaveFrameHeight: CGFloat = 20
-    /// Pill height while the spectrum-only mode is on (all island stages read
-    /// it through `NotchViewModel.collapsedHeight`, so silhouette, hit rect
-    /// and content rows stay in lock-step). 30 + `islandTopGap` (2) = 32 —
-    /// still inside the physical notch's band on notched MacBooks.
-    static let collapsedTallHeight: CGFloat = 30
-    /// The collapsed height currently in effect (see `collapsedTallHeight`).
-    /// Views without a `NotchViewModel` read this; the view model's
-    /// `collapsedHeight` returns the same value, so there is one formula.
+
+    // MARK: Spectrum-only pill proportions
+    //
+    // The spectrum-only pill is the spectrum *page* scaled down, not a
+    // separate design. Side by side the page read far better than the pill at
+    // the same settings, and the reason was measurable: the page's field is
+    // ~2.8× wider than tall and holds ~19 chunky bars, while the pill's was
+    // 5.4× wider than tall and crammed 32 hairlines into it. Same data, half
+    // the vertical range per bar, twice the bar density.
+    //
+    // So both now follow one rule — a bar is `waveBarAspectRatio` times taller
+    // than it is wide, gaps are `waveBarGapRatio` of a bar — and the pill
+    // derives everything from the single width knob via
+    // `pillSpectrumGeometry(forWidth:)`.
+
+    /// A fully deflected bar is this many times taller than it is wide. Shared
+    /// with `SpectrumStageView`, which is where the proportion was tuned.
+    static let waveBarAspectRatio: CGFloat = 12
+    /// How much wider than tall the pill's wave field sits, measured off the
+    /// spectrum page (356 × 126 pt usable → 2.83). Keeping this ratio is what
+    /// makes the pill read as the page in miniature rather than as a stripe.
+    static let pillSpectrumFieldAspect: CGFloat = 2.83
+    /// Vertical range the wave may occupy. The lower bound is not arbitrary:
+    /// 24 / `waveBarAspectRatio` is exactly `collapsedWaveBarWidth` (2.0 pt),
+    /// so at the narrow end the derived geometry *is* the Apple-measured one —
+    /// 6 bars, 2.0 pt wide, 1.6 pt gaps, a 20.0 pt run — and the default keeps
+    /// the look that was measured off a real Dynamic Island. The upper bound
+    /// stops the widest setting from growing a pill that swallows the menu bar.
+    static let pillSpectrumWaveHeightRange: ClosedRange<CGFloat> = 24...42
+    /// Black kept above and below the wave inside the pill — glow room, and
+    /// what makes the run sit *in* a capsule rather than fill it.
+    static let pillSpectrumWavePadding: CGFloat = 4.5
+
+    /// Everything the spectrum-only pill needs, derived from the one knob so
+    /// the view, the width estimate in `NotchViewModel.collapsedWidth` and the
+    /// tests can never disagree about it.
+    struct PillSpectrumGeometry: Equatable {
+        /// Tallest a fully deflected bar gets.
+        let waveHeight: CGFloat
+        let barWidth: CGFloat
+        let spacing: CGFloat
+        let barCount: Int
+        /// Exact width of the run — no trailing gap. The pill is this wide.
+        let runWidth: CGFloat
+        /// Frame the wave is given inside the pill (`waveHeight` + glow room).
+        var frameHeight: CGFloat { waveHeight + pillSpectrumWavePadding }
+        /// Height of the whole capsule in spectrum-only mode.
+        var pillHeight: CGFloat { waveHeight + 2 * pillSpectrumWavePadding }
+    }
+
+    /// Scales the spectrum page down to a requested run width: the field keeps
+    /// the page's aspect (so a wider pill is also a taller one), bar thickness
+    /// follows the height, and the run then holds however many bars fit at
+    /// that pitch — which is why widening gives *fewer, fatter* bars than the
+    /// old fixed 2.0 pt raster did, and why it looks like the page.
+    static func pillSpectrumGeometry(forWidth requestedWidth: Double) -> PillSpectrumGeometry {
+        let width = CGFloat(max(0, requestedWidth))
+        let waveHeight = min(pillSpectrumWaveHeightRange.upperBound,
+                             max(pillSpectrumWaveHeightRange.lowerBound, width / pillSpectrumFieldAspect))
+        let barWidth = waveHeight / waveBarAspectRatio
+        let spacing = barWidth * waveBarGapRatio
+        let pitch = barWidth + spacing
+        // Floor, not round: a run may be narrower than asked for, never wider —
+        // a fractional bar of overhang shows up as a gap beside the timer. The
+        // epsilon keeps an exact fit (a width that *is* n bars) from falling to
+        // n-1 on a floating-point hair.
+        let fits = Int((width + spacing) / pitch + 1e-9)
+        let barCount = min(max(fits, pillSpectrumBarRange.lowerBound), pillSpectrumBarRange.upperBound)
+        let runWidth = CGFloat(barCount) * barWidth + CGFloat(barCount - 1) * spacing
+        return PillSpectrumGeometry(waveHeight: waveHeight, barWidth: barWidth,
+                                    spacing: spacing, barCount: barCount, runWidth: runWidth)
+    }
+
+    // MARK: Spectrum page proportions
+    //
+    // Lives here rather than inside `SpectrumStageView` because the pill needs
+    // to *predict* it: closing the island shrinks the page's wave back into the
+    // pill, and that animation needs its starting geometry before the page has
+    // laid out (or after it has already gone).
+
+    /// Never more than the analyzer actually resolves — past that the extra
+    /// bars are interpolation, not information.
+    static let stageMaximumBars = 32
+    /// Breathing room so the tallest bar and its glow don't touch the edges.
+    static let stageInset: CGFloat = 12
+
+    /// The wave's geometry for a stage of `size` — bar thickness from the
+    /// height (see `waveBarAspectRatio`), then as many bars as fit the width.
+    /// The same rule the pill scales down, which is what lets the two morph.
+    static func stageWaveGeometry(in size: CGSize, barCount forcedCount: Int? = nil) -> PillSpectrumGeometry {
+        let width = max(0, size.width - stageInset * 2)
+        // Never taller than the page's own field shape. A whole screen is much
+        // squarer than the panel (≈1.6 against 2.83), and since bar thickness
+        // follows the field height, an unclamped fullscreen field produced a
+        // handful of enormous bars instead of the page's run made bigger. Letter-
+        // boxing keeps every size reading as the same wave.
+        let height = min(max(0, size.height - stageInset * 2), width / pillSpectrumFieldAspect)
+        guard width > 0, height > 0 else {
+            return PillSpectrumGeometry(waveHeight: 0, barWidth: 0, spacing: 0, barCount: 1, runWidth: 0)
+        }
+        let barWidth = max(1, height / waveBarAspectRatio)
+        let spacing = barWidth * waveBarGapRatio
+        let pitch = barWidth + spacing
+        let fits = forcedCount ?? Int(((width + spacing) / pitch).rounded())
+        let barCount = max(1, min(stageMaximumBars, fits))
+        // The stage spreads its run across the full width it was given, so the
+        // bars are re-fitted to it rather than left at the target thickness.
+        let fittedBarWidth = waveBarWidth(fitting: barCount, into: width)
+        return PillSpectrumGeometry(waveHeight: height,
+                                    barWidth: fittedBarWidth,
+                                    spacing: fittedBarWidth * waveBarGapRatio,
+                                    barCount: barCount,
+                                    runWidth: width)
+    }
+
+    /// Content area a carousel page gets inside the expanded panel. The row
+    /// spacing is part of it: the tab bar and the pages sit in a `VStack` with
+    /// `expandedRowSpacing` between them, and leaving it out made every
+    /// prediction of the page's wave 8 pt too tall and 4 pt too high — enough
+    /// for the travelling wave and the page's own to disagree visibly.
+    static var expandedPageSize: CGSize {
+        CGSize(width: expandedWidth - expandedContentInset * 2,
+               height: expandedHeight - currentCollapsedHeight - expandedBottomPadding - expandedRowSpacing)
+    }
+
+    /// What the spectrum page's wave settles at once the island is open. The
+    /// pill's shrink-back animation starts from these metrics, so the run the
+    /// user just watched appears to contract into the capsule.
+    static var spectrumPageWaveGeometry: PillSpectrumGeometry {
+        stageWaveGeometry(in: expandedPageSize)
+    }
+
+    /// How small the page's run has to start to match the pill's — i.e. the
+    /// pill⇄page morph expressed as one number, since both ends follow the same
+    /// proportion rule and therefore differ only in scale.
+    static var pillToPageWaveScale: CGFloat {
+        let pill = pillSpectrumGeometry(forWidth: UserSettings.shared.pillSpectrumWidth)
+        let page = spectrumPageWaveGeometry
+        guard page.waveHeight > 0 else { return 1 }
+        return min(1, pill.waveHeight / page.waveHeight)
+    }
+
+    /// The page-sized end of the morph, holding the pill's bar *count*.
+    ///
+    /// The two ends normally resolve their own counts (19 in the pill, ~22 on
+    /// the page), and a count that changes mid-flight re-buckets the spectrum
+    /// on the very frames the eye is following. Keeping the count fixed makes
+    /// the morph purely geometric: the same bars, further apart and taller.
+    static func spectrumPageWaveGeometry(barCount: Int) -> PillSpectrumGeometry {
+        let page = spectrumPageWaveGeometry
+        let count = max(1, barCount)
+        let barWidth = waveBarWidth(fitting: count, into: page.runWidth)
+        let spacing = barWidth * waveBarGapRatio
+        return PillSpectrumGeometry(waveHeight: page.waveHeight, barWidth: barWidth,
+                                    spacing: spacing, barCount: count, runWidth: page.runWidth)
+    }
+
+    /// Centre of the pill's wave, measured from the island's top edge.
+    static var pillWaveCentreY: CGFloat { currentCollapsedHeight / 2 }
+    /// Centre of the spectrum page's wave, from the same origin — the tab bar
+    /// band sits above the page area.
+    static var pageWaveCentreY: CGFloat {
+        currentCollapsedHeight + expandedPageSize.height / 2
+    }
+
+    /// How far above the spectrum page's centre the pill's wave sits, measured
+    /// in the page's own coordinates — i.e. the distance the run travels when
+    /// the island opens. The band the pill occupies is `currentCollapsedHeight`
+    /// tall and sits directly above the page area.
+    static var pillToPageWaveOffset: CGFloat {
+        -(expandedPageSize.height / 2 + currentCollapsedHeight / 2)
+    }
+
+    /// The same for the fullscreen stage: the panel's page sits near the top of
+    /// the screen, the fullscreen run in its middle.
+    static func pageToFullscreenWaveOffset(screenSize: CGSize) -> CGFloat {
+        let pageCentreFromTop = islandTopGap + currentCollapsedHeight + expandedPageSize.height / 2
+        return pageCentreFromTop - screenSize.height / 2
+    }
+
+    /// The same idea one step up: how small the fullscreen run starts so it
+    /// grows out of the island page's.
+    static func pageToFullscreenWaveScale(screenSize: CGSize) -> CGFloat {
+        let full = stageWaveGeometry(in: CGSize(width: screenSize.width - stageInset * 4,
+                                                height: screenSize.height - stageInset * 4))
+        guard full.waveHeight > 0 else { return 1 }
+        return min(1, spectrumPageWaveGeometry.waveHeight / full.waveHeight)
+    }
+
+    /// The collapsed height currently in effect. Views without a
+    /// `NotchViewModel` read this; the view model's `collapsedHeight` returns
+    /// the same value, so there is one formula. In spectrum-only mode it grows
+    /// with the width knob (see `pillSpectrumGeometry(forWidth:)`) — at the
+    /// default that is 30 pt, which with `islandTopGap` still sits inside a
+    /// physical notch's band; the widest settings deliberately hang below it,
+    /// since that mode exists to be watched.
     static var currentCollapsedHeight: CGFloat {
-        UserSettings.shared.pillSpectrumOnly ? collapsedTallHeight : collapsedHeight
+        guard UserSettings.shared.pillSpectrumOnly else { return collapsedHeight }
+        return pillSpectrumGeometry(forWidth: UserSettings.shared.pillSpectrumWidth).pillHeight
     }
     /// Font size of the shelf badge's item count in the collapsed pill.
     static let collapsedBadgeFontSize: CGFloat = 9
@@ -159,6 +351,43 @@ enum NotchLayout {
     /// counted twice since the centred icon mirrors the label as empty space.
     static let soloBaseWidth: CGFloat = 74
     static let soloLabelCharWidth: CGFloat = 8
+
+    /// Roughly what a tab's glyph occupies at `bandFontSize`.
+    static let tabIconEstimatedWidth: CGFloat = 16
+    /// Room the tab row has. Measured against the *band* capsule, not the
+    /// expanded one: the same row renders at both widths (the expand and the
+    /// collapse walk each rest in `.band`), so a scale that only fits the wider
+    /// one clipped the outermost tabs against the rim for the whole band stage
+    /// — precisely the tabs the scaling exists to rescue.
+    static var tabBarAvailableWidth: CGFloat { bandWidth - 2 * expandedContentInset }
+    /// A hair of slack so the outermost label never touches the rounded rim.
+    private static let tabBarFitMargin: CGFloat = 0.97
+
+    /// Estimated width of one expanded tab — icon, gap, label, padding — using
+    /// the same deliberately generous per-character figure as `soloLabelCharWidth`
+    /// (over-estimating shrinks the row slightly; clipping it does not).
+    static func tabItemWidthEstimate(labelCharacters: Int) -> CGFloat {
+        tabIconEstimatedWidth + tabIconLabelSpacing
+            + CGFloat(labelCharacters) * soloLabelCharWidth
+            + 2 * tabItemPaddingHorizontal
+    }
+
+    /// How much the whole tab row has to be scaled down to stay inside the
+    /// island, or 1 when it already fits.
+    ///
+    /// Six tabs with German labels come to roughly 550 pt against 428 pt of
+    /// island, and an over-wide `HStack` does not wrap or truncate — it overflows
+    /// its centre, so the outer labels ran past the capsule and read as floating
+    /// outside it. Scaling the row (rather than shrinking fonts and paddings
+    /// individually) is what keeps the *solo* metrics untouched, and those are
+    /// tuned to the point of pixel-identity with the pill's glyph.
+    static func tabBarFitScale(titles: [String]) -> CGFloat {
+        guard !titles.isEmpty else { return 1 }
+        let natural = titles.reduce(CGFloat(0)) { $0 + tabItemWidthEstimate(labelCharacters: $1.count) }
+            + CGFloat(titles.count - 1) * tabBarSpacing
+        guard natural > 0 else { return 1 }
+        return min(1, tabBarAvailableWidth * tabBarFitMargin / natural)
+    }
     /// HStack spacing between a tab's icon and its label — also the amount the
     /// solo tab is shifted by to re-centre the icon.
     static let tabIconLabelSpacing: CGFloat = 4
@@ -388,6 +617,11 @@ enum NotchLayout {
     /// morphs on an empty island and the content materialises into a nearly
     /// still frame — the iPhone's own trick.
     static let pagesSettleDelay: TimeInterval = 0.18
+
+    /// How long after the wave has set off for its place the tab bar waits
+    /// before fading up. Long enough that the two read as separate beats —
+    /// island and wave first, chrome last — short enough not to feel withheld.
+    static let chromeRevealDelay: TimeInterval = 0.16
 
     /// How long CaptureView waits before mounting its AppKit-backed text field.
     /// NSTextField ignores SwiftUI clip shapes, so the real field must not exist

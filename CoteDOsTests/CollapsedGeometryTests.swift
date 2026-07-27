@@ -80,28 +80,88 @@ final class CollapsedGeometryTests: XCTestCase {
         )
     }
 
-    /// Widening only adds bars — the gap between them never changes. That is
-    /// the whole point of collapsing the old width + bar-count pair into one
-    /// knob, and it is what keeps every slider position looking tuned.
-    func testWideningAddsBarsAtAConstantPitch() {
-        let narrow = NotchLayout.pillSpectrumBarCount(forWidth: NotchLayout.pillSpectrumMinWidth)
-        let wide = NotchLayout.pillSpectrumBarCount(forWidth: NotchLayout.pillSpectrumMaxWidth)
-        XCTAssertEqual(narrow, NotchLayout.pillSpectrumBarRange.lowerBound)
-        XCTAssertEqual(wide, NotchLayout.pillSpectrumBarRange.upperBound)
-        for count in NotchLayout.pillSpectrumBarRange {
-            let width = NotchLayout.pillSpectrumWidth(forBarCount: count)
-            XCTAssertEqual(NotchLayout.pillSpectrumBarCount(forWidth: Double(width)), count,
-                           "\(width) pt should hold exactly \(count) bars")
-            let bars = CGFloat(count) * NotchLayout.collapsedWaveBarWidth
-            XCTAssertEqual(width - bars, CGFloat(count - 1) * NotchLayout.collapsedWaveSpacing, accuracy: 0.001)
+    /// The pill is the spectrum page scaled down, so every slider position has
+    /// to keep the page's proportions: a bar is `waveBarAspectRatio` times
+    /// taller than wide, gaps are `waveBarGapRatio` of a bar, and the field is
+    /// never flatter than the page's own aspect. That last one is the property
+    /// that was missing — a fixed 2.0 pt raster let the widest setting stretch
+    /// to 5.4× wider than tall and cram 32 hairlines in, which is exactly why
+    /// it read as a stripe next to the page.
+    func testWideningKeepsThePagesProportions() {
+        var previousRun: CGFloat = 0
+        for barCount in NotchLayout.pillSpectrumBarRange {
+            let width = Double(NotchLayout.pillSpectrumWidth(forBarCount: barCount))
+            let wave = NotchLayout.pillSpectrumGeometry(forWidth: width)
+
+            XCTAssertEqual(wave.barWidth, wave.waveHeight / NotchLayout.waveBarAspectRatio, accuracy: 0.001,
+                           "bar thickness must follow the field height at \(width) pt")
+            XCTAssertEqual(wave.spacing, wave.barWidth * NotchLayout.waveBarGapRatio, accuracy: 0.001,
+                           "gaps must stay proportional to the bars at \(width) pt")
+            // Exactly its bars and gaps — never a fractional bar of overhang,
+            // which would show up as a gap beside the timer segment.
+            XCTAssertEqual(wave.runWidth,
+                           CGFloat(wave.barCount) * wave.barWidth + CGFloat(wave.barCount - 1) * wave.spacing,
+                           accuracy: 0.001)
+            XCTAssertLessThanOrEqual(wave.runWidth, CGFloat(width) + 0.001,
+                                     "the run may be narrower than asked for, never wider")
+            XCTAssertGreaterThanOrEqual(wave.runWidth, previousRun - 0.001, "widening must not shrink the run")
+            XCTAssertLessThanOrEqual(wave.runWidth / wave.waveHeight,
+                                     NotchLayout.pillSpectrumFieldAspect + 0.01,
+                                     "the field must never be flatter than the spectrum page's")
+            previousRun = wave.runWidth
         }
     }
 
     /// The default is Apple's own run, measured off a real Dynamic Island:
-    /// 6 bars, 20.0 pt end to end.
+    /// 6 bars, 2.0 pt wide, 1.6 pt gaps, 20.0 pt end to end. The scaled-page
+    /// rule has to reproduce that exactly at the narrow end — that is what
+    /// `pillSpectrumWaveHeightRange`'s lower bound is chosen for — otherwise
+    /// making the wide setting better would have quietly retuned the default.
     func testDefaultWidthIsApplesSixBarRun() {
-        XCTAssertEqual(NotchLayout.pillSpectrumBarCount(forWidth: NotchLayout.pillSpectrumDefaultWidth), 6)
         XCTAssertEqual(NotchLayout.pillSpectrumDefaultWidth, 20.0, accuracy: 0.001)
+        let wave = NotchLayout.pillSpectrumGeometry(forWidth: NotchLayout.pillSpectrumDefaultWidth)
+        XCTAssertEqual(wave.barCount, 6)
+        XCTAssertEqual(wave.barWidth, NotchLayout.collapsedWaveBarWidth, accuracy: 0.001)
+        XCTAssertEqual(wave.spacing, NotchLayout.collapsedWaveSpacing, accuracy: 0.001)
+        XCTAssertEqual(wave.runWidth, 20.0, accuracy: 0.001)
+    }
+
+    /// The widest setting is the point of the whole change: it should land on
+    /// the page's own reading — around 19 chunky bars in a field near the
+    /// page's aspect — rather than 32 hairlines, and the pill grows to hold it.
+    func testWidestSettingMatchesTheSpectrumPage() {
+        let wave = NotchLayout.pillSpectrumGeometry(forWidth: NotchLayout.pillSpectrumMaxWidth)
+        XCTAssertEqual(wave.barCount, 19, "the widest pill should read like the page's run")
+        XCTAssertGreaterThan(wave.barWidth, 3, "its bars should be chunky, not hairlines")
+        XCTAssertEqual(wave.runWidth / wave.waveHeight, NotchLayout.pillSpectrumFieldAspect, accuracy: 0.1)
+        XCTAssertGreaterThan(wave.pillHeight, NotchLayout.collapsedHeight,
+                             "a wave that tall needs a taller pill than the menu bar's")
+    }
+
+    // MARK: Tab bar fit
+
+    /// Six tabs' labels overflowed the island and read as sitting outside it —
+    /// an `HStack` neither wraps nor truncates, it just overflows its centre.
+    /// Whatever the enabled set is, the row has to end up inside the island.
+    func testTabRowFitsInsideTheIslandAtEveryTabCount() {
+        let titles = NotchViewModel.Tab.allCases.map(\.title)
+        for count in 1...titles.count {
+            let row = Array(titles.prefix(count))
+            let natural = row.reduce(CGFloat(0)) {
+                $0 + NotchLayout.tabItemWidthEstimate(labelCharacters: $1.count)
+            } + CGFloat(count - 1) * NotchLayout.tabBarSpacing
+            let scaled = natural * NotchLayout.tabBarFitScale(titles: row)
+            XCTAssertLessThanOrEqual(scaled, NotchLayout.tabBarAvailableWidth,
+                                     "\(count) tabs must fit inside the island")
+        }
+    }
+
+    /// The scale is a remedy, not a default: a row that already fits must be
+    /// left alone, or every island would render its tabs subtly shrunk.
+    func testTabRowIsNotScaledWhenItAlreadyFits() {
+        let titles = Array(NotchViewModel.Tab.allCases.prefix(3).map(\.title))
+        XCTAssertEqual(NotchLayout.tabBarFitScale(titles: titles), 1)
+        XCTAssertEqual(NotchLayout.tabBarFitScale(titles: []), 1)
     }
 
     // MARK: Shift

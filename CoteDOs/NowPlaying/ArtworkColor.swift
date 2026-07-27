@@ -42,10 +42,17 @@ struct HSB: Equatable {
     /// Same hue, saturation and brightness each scaled — the two axes a
     /// spectrum bar's vertical gradient actually travels along.
     func scaled(saturation sFactor: Double, brightness bFactor: Double) -> Color {
-        Color(
-            hue: h,
-            saturation: min(1, max(0, s * CGFloat(sFactor))),
-            brightness: min(1, max(0.1, b * CGFloat(bFactor)))
+        scaledHSB(saturation: sFactor, brightness: bFactor).color
+    }
+
+    /// Same scaling, kept in components — callers that need to interpolate the
+    /// result (the wave's foot colour on very tall bars) would otherwise have to
+    /// decompose the `Color` again, which is a ColorSync round-trip.
+    func scaledHSB(saturation sFactor: Double, brightness bFactor: Double) -> HSB {
+        HSB(
+            h: h,
+            s: min(1, max(0, s * CGFloat(sFactor))),
+            b: min(1, max(0.1, b * CGFloat(bFactor)))
         )
     }
 

@@ -78,6 +78,7 @@ final class WaveMotionContactSheetTests: XCTestCase {
         let tint = Color(hue: 0.97, saturation: 0.75, brightness: 0.85)
         let secondary = Color(hue: 0.50, saturation: 0.65, brightness: 0.75)
 
+        let geometry = NotchLayout.pillSpectrumGeometry(forWidth: NotchLayout.pillSpectrumMaxWidth)
         let sheet = VStack(spacing: 6) {
             ForEach(Array(frames.enumerated()), id: \.offset) { _, bands in
                 WaveBarsView(
@@ -85,12 +86,12 @@ final class WaveMotionContactSheetTests: XCTestCase {
                     tint: tint,
                     secondaryTint: secondary,
                     bands: bands,
-                    count: NotchLayout.collapsedWideWaveBarCount,
-                    maxHeight: NotchLayout.collapsedWideWaveMaxHeight,
-                    barWidth: NotchLayout.collapsedWaveBarWidth,
-                    spacing: NotchLayout.collapsedWaveSpacing
+                    count: geometry.barCount,
+                    maxHeight: geometry.waveHeight,
+                    barWidth: geometry.barWidth,
+                    spacing: geometry.spacing
                 )
-                .frame(width: NotchLayout.collapsedWideWavesWidth, height: NotchLayout.collapsedWideWaveFrameHeight)
+                .frame(width: geometry.runWidth, height: geometry.frameHeight)
             }
         }
         .padding(12)
