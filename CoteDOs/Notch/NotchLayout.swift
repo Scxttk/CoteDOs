@@ -51,6 +51,16 @@ enum NotchLayout {
     /// are user-tunable (`pillSpectrumBarCount`/`pillSpectrumWidth`); these
     /// constants are the defaults and what the snapshot tests render. The
     /// taller pill (`collapsedTallHeight`) gives the bars real travel.
+    /// Effektive Breite des Spectrum-only-Waves: nie schmaler als die
+    /// Mindest-Inhaltsbreite der Balken (Balkenbreite + Mindest-Spacing),
+    /// sonst quillt der HStack in `WaveBarsView` über seinen fixen Frame und
+    /// frisst den Abstand zum Timer-Segment. View und Width-Schätzung
+    /// (`NotchViewModel.collapsedWidth`) lesen beide diesen Helper.
+    static func pillSpectrumEffectiveWidth(barCount: Int, requestedWidth: Double) -> CGFloat {
+        let minContent = CGFloat(barCount) * collapsedWaveBarWidth
+            + CGFloat(max(0, barCount - 1)) * collapsedWaveSpacing
+        return max(CGFloat(requestedWidth), minContent)
+    }
     static let collapsedWideWaveBarCount: Int = 16
     static let collapsedWideWaveMaxHeight: CGFloat = 18
     static let collapsedWideWavesWidth: CGFloat = 48

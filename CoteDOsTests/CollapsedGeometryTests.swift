@@ -10,6 +10,7 @@ final class CollapsedGeometryTests: XCTestCase {
     private var viewModel: NotchViewModel!
     private var originalSpectrumOnly = false
     private var originalSpectrumWidth = 0.0
+    private var originalSpectrumBarCount = 0
 
     override func setUp() {
         super.setUp()
@@ -18,12 +19,14 @@ final class CollapsedGeometryTests: XCTestCase {
         // depend on whatever the host app's defaults happen to be.
         originalSpectrumOnly = UserSettings.shared.pillSpectrumOnly
         originalSpectrumWidth = UserSettings.shared.pillSpectrumWidth
+        originalSpectrumBarCount = UserSettings.shared.pillSpectrumBarCount
         UserSettings.shared.pillSpectrumOnly = false
     }
 
     override func tearDown() {
         UserSettings.shared.pillSpectrumOnly = originalSpectrumOnly
         UserSettings.shared.pillSpectrumWidth = originalSpectrumWidth
+        UserSettings.shared.pillSpectrumBarCount = originalSpectrumBarCount
         super.tearDown()
     }
 
@@ -61,6 +64,36 @@ final class CollapsedGeometryTests: XCTestCase {
         XCTAssertEqual(
             viewModel.collapsedWidth(isPlaying: true, hasItems: true, timerText: text),
             expected
+        )
+    }
+
+    /// Max bars at a narrow width slider: 32 bars can't fit in 74pt at the
+    /// 1pt minimum spacing, so the effective wave width must grow to the
+    /// bars' minimum content width (32 × 2 + 31 × 1 = 95) — otherwise the
+    /// wave overflows its frame and visually swallows the gap to the timer.
+    func testSpectrumOnlyMaxBarsWidensPillPastTheWidthSlider() {
+        UserSettings.shared.pillSpectrumOnly = true
+        UserSettings.shared.pillSpectrumWidth = 74
+        UserSettings.shared.pillSpectrumBarCount = 32
+        let text = "12:34"
+        let minContent = 32 * NotchLayout.collapsedWaveBarWidth + 31 * NotchLayout.collapsedWaveSpacing
+        let expected = minContent
+            + NotchLayout.collapsedItemSpacing + timerSegmentWidth(text)
+            + endPadding
+        XCTAssertEqual(
+            viewModel.collapsedWidth(isPlaying: true, hasItems: false, timerText: text),
+            expected
+        )
+    }
+
+    /// A width slider above the bars' minimum stays authoritative.
+    func testSpectrumOnlyWideSliderKeepsItsWidth() {
+        UserSettings.shared.pillSpectrumOnly = true
+        UserSettings.shared.pillSpectrumWidth = 120
+        UserSettings.shared.pillSpectrumBarCount = 32
+        XCTAssertEqual(
+            viewModel.collapsedWidth(isPlaying: true, hasItems: false, timerText: nil),
+            120 + endPadding
         )
     }
 
