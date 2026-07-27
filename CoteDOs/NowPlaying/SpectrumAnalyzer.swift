@@ -234,10 +234,10 @@ final class SpectrumAnalyzer: ObservableObject {
         desc.isPrivate = true
         desc.muteBehavior = .unmuted
         var tap: AudioObjectID = 0
-        guard AudioHardwareCreateProcessTap(desc, &tap) == noErr, tap != 0 else { return }
+        guard AudioHardwareCreateProcessTap(desc, &tap) == noErr, tap != 0 else { buildFailed(); return }
         tapID = tap
 
-        guard let tapUID = stringProperty(tapID, kAudioTapPropertyUID) else { stop(); return }
+        guard let tapUID = stringProperty(tapID, kAudioTapPropertyUID) else { buildFailed(); return }
         sampleRate = tapFormat(tapID)?.mSampleRate ?? 48_000
 
         // 2. A private aggregate device that contains the tap, so we can install
@@ -256,7 +256,7 @@ final class SpectrumAnalyzer: ObservableObject {
         ]
         var agg: AudioObjectID = 0
         guard AudioHardwareCreateAggregateDevice(aggDescription as CFDictionary, &agg) == noErr, agg != 0 else {
-            stop(); return
+            buildFailed(); return
         }
         aggregateID = agg
 
@@ -265,14 +265,30 @@ final class SpectrumAnalyzer: ObservableObject {
         let status = AudioDeviceCreateIOProcIDWithBlock(&proc, aggregateID, queue) { [weak self] _, inInputData, _, _, _ in
             self?.process(inInputData)
         }
-        guard status == noErr, let proc else { stop(); return }
+        guard status == noErr, let proc else { buildFailed(); return }
         ioProcID = proc
-        guard AudioDeviceStart(aggregateID, proc) == noErr else { stop(); return }
+        guard AudioDeviceStart(aggregateID, proc) == noErr else { buildFailed(); return }
 
         running = true
         registerDeviceChangeListener()
         startSourceCheckTimer()
         DispatchQueue.main.async { self.isLive = true }
+    }
+
+    /// A failed tap build must *not* kill the analyzer the way `stop()` does.
+    /// It used to: the failure paths called `stop()`, which — once `start()`
+    /// grew the user-level `desired` flag — cleared that flag, so a single
+    /// transient HAL error during a suspend/resume cycle silently disabled
+    /// the spectrum until the next screen wake, and every later probe and
+    /// `pokeResume()` bailed on `guard desired`. (Spotify keeps its output
+    /// stream open while paused, so those cycles happen all day.) Instead:
+    /// clean up whatever half-built objects exist and fall back to the
+    /// suspended state, a probe stage later, and let the probe try again.
+    private func buildFailed() {
+        teardown()
+        suspended = true
+        probeStage = min(probeStage + 1, Self.probeIntervalsSeconds.count - 1)
+        startSourceCheckTimer()
     }
 
     func stop() {
