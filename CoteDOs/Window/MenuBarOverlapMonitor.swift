@@ -29,7 +29,11 @@ final class MenuBarOverlapMonitor {
     /// How close the frontmost app's rightmost menu item may get to the
     /// pill's left edge before it counts as an overlap.
     private static let safetyMargin: CGFloat = 8
-    private static let pollInterval: TimeInterval = 1.0
+    /// Fallback rate only — an app switch already triggers `evaluate()` via
+    /// notification. Each tick reads the frontmost app's menu bar over the AX
+    /// API (cross-process IPC), and a menu bar that changes width *without* an
+    /// app switch is rare enough that half the old rate is fine.
+    private static let pollInterval: TimeInterval = 2.0
 
     func start() {
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(

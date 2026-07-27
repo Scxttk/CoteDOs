@@ -2,6 +2,71 @@ import AppKit
 import CoreImage
 import SwiftUI
 
+/// A colour taken apart into hue/saturation/brightness *once*.
+///
+/// Every shading helper the wave uses (whiten a bar's tip, dim its foot, mix
+/// two accents) needs those components, and getting them out of a SwiftUI
+/// `Color` means `NSColor(color).usingColorSpace(.deviceRGB)` — a ColorSync
+/// round-trip. That is nothing once per palette and ruinous per bar per frame:
+/// a `sample` of the running app had `ColorSyncProfileGetTag` and friends at
+/// the top of the main thread, because the 32-bar pill wave was re-deriving
+/// every bar's colour 30×/s. So the round-trip happens where the colour is
+/// *decided* (cover palette, accent) and everything downstream is arithmetic.
+struct HSB: Equatable {
+    var h: CGFloat
+    var s: CGFloat
+    var b: CGFloat
+
+    init(_ color: Color) {
+        let ns = NSColor(color).usingColorSpace(.deviceRGB) ?? NSColor(color)
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        ns.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        self.h = h
+        self.s = s
+        self.b = b
+    }
+
+    init(h: CGFloat, s: CGFloat, b: CGFloat) {
+        self.h = h
+        self.s = s
+        self.b = b
+    }
+
+    var color: Color { Color(hue: h, saturation: s, brightness: b) }
+
+    /// Blend toward white by `amount` (0 = unchanged, 1 = white): saturation
+    /// drains as brightness rises, like a colour overdriven into incandescence.
+    /// `original` is returned verbatim at `amount <= 0` so a bar that isn't
+    /// peaking renders bit-identically to the un-decomposed colour.
+    func whitened(_ amount: Double, original: Color) -> Color {
+        guard amount > 0 else { return original }
+        let k = min(1, CGFloat(amount))
+        return Color(hue: h, saturation: s * (1 - k), brightness: b + (1 - b) * k)
+    }
+
+    /// Same hue and saturation, brightness scaled by `factor` (clamped).
+    func brightnessScaled(_ factor: Double) -> Color {
+        Color(hue: h, saturation: s, brightness: min(1, max(0.1, b * CGFloat(factor))))
+    }
+
+    /// Interpolation toward `other`, hue travelling the *shortest arc* — RGB
+    /// interpolation between two saturated hues passes through the desaturated
+    /// middle and turns the wave's centre to mud.
+    func mixed(to other: HSB, t: Double) -> HSB {
+        let fraction = CGFloat(max(0, min(1, t)))
+        var dh = other.h - h
+        if dh > 0.5 { dh -= 1 }
+        if dh < -0.5 { dh += 1 }
+        var hue = (h + dh * fraction).truncatingRemainder(dividingBy: 1)
+        if hue < 0 { hue += 1 }
+        return HSB(
+            h: hue,
+            s: s + (other.s - s) * fraction,
+            b: b + (other.b - b) * fraction
+        )
+    }
+}
+
 /// The taste-dependent half of the bar-palette computation, read from
 /// `UserSettings` on the main thread and handed to `ArtworkColor` so the
 /// background work never touches the settings object. Equatable so a changed
@@ -50,6 +115,24 @@ struct CoverBarPalette: Equatable {
     struct Bar: Equatable {
         let top: Color
         let bottom: Color
+        /// `top` decomposed, so the per-frame tip whitening in `WaveBarsView`
+        /// is arithmetic instead of a ColorSync round-trip (see `HSB`).
+        let topHSB: HSB
+        /// What the bar's gradient actually ends on. Neighbouring bars over
+        /// the same region of the artwork quantise to the *same* colour —
+        /// that bundling is the point — so when a column's two halves land on
+        /// one palette entry the gradient is spread by brightness instead,
+        /// keeping the bar from reading as a flat slab. Derived here rather
+        /// than in the view because the palette is built once per cover, off
+        /// the main thread, and then cached.
+        let foot: Color
+
+        init(top: Color, bottom: Color) {
+            self.top = top
+            self.bottom = bottom
+            self.topHSB = HSB(top)
+            self.foot = top == bottom ? HSB(bottom).brightnessScaled(0.92) : bottom
+        }
     }
 
     /// Bar counts the table is built for — everything the pill's bar-count
@@ -58,15 +141,14 @@ struct CoverBarPalette: Equatable {
 
     let bars: [Int: [Bar]]
 
-    func pair(forBarAt index: Int, total: Int) -> (top: Color, bottom: Color)? {
+    func bar(forBarAt index: Int, total: Int) -> Bar? {
         // Fall back to the nearest count we did compute rather than drawing
         // nothing, if a caller ever asks for an unsupported bar count.
         let row = bars[total] ?? bars[Self.supportedBarCounts.min {
             abs($0 - total) < abs($1 - total)
         } ?? 5]
         guard let row, index >= 0, !row.isEmpty else { return nil }
-        let bar = row[min(index, row.count - 1)]
-        return (bar.top, bar.bottom)
+        return row[min(index, row.count - 1)]
     }
 }
 

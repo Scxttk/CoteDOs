@@ -5,6 +5,26 @@ import CoreAudio
 import Foundation
 import QuartzCore
 
+/// The band levels, deliberately split off `SpectrumAnalyzer` into their own
+/// observable object.
+///
+/// They change 15×/s; every other property the analyzer publishes changes a
+/// few times a minute at most. With all of it on one object, a band update
+/// invalidated *every* view that observes the analyzer — which reaches up to
+/// `NotchRootView`, so AppKit re-laid out the entire hosting view 15×/s for a
+/// wave the size of a thumbnail (`sample` showed `NSHostingView.layout` under
+/// the display cycle as the main thread's biggest item). Views that draw the
+/// bars observe this; views that only need `hasSignal`/`isLive`/`sourceBundleID`
+/// observe the analyzer and hold still while the wave moves.
+final class SpectrumBands: ObservableObject {
+    /// Normalised per-band magnitudes (0…1), published on the main thread.
+    @Published fileprivate(set) var values: [CGFloat]
+
+    fileprivate init(count: Int) {
+        values = Array(repeating: 0, count: count)
+    }
+}
+
 /// Real-time frequency visualizer data. Taps the system audio output with a
 /// CoreAudio process tap (macOS 14.4+, needs the audio-recording permission),
 /// runs an FFT over it and exposes a handful of log-spaced frequency bands so
@@ -12,8 +32,9 @@ import QuartzCore
 /// permission is denied / the tap fails, `bands` stays flat and the visualizer
 /// falls back to its procedural animation.
 final class SpectrumAnalyzer: ObservableObject {
-    /// Normalised per-band magnitudes (0…1), published on the main thread.
-    @Published private(set) var bands: [CGFloat]
+    /// Live band levels. Their own observable, not a `@Published` property
+    /// here — see `SpectrumBands` for why.
+    let bands: SpectrumBands
     /// True once a tap is actually running and feeding real data.
     @Published private(set) var isLive = false
     /// True while the tapped signal actually carries audible content — not just
@@ -134,7 +155,7 @@ final class SpectrumAnalyzer: ObservableObject {
 
     init(bandCount: Int = 6) {
         self.bandCount = bandCount
-        self.bands = Array(repeating: 0, count: bandCount)
+        self.bands = SpectrumBands(count: bandCount)
         self.log2n = vDSP_Length(log2(Float(fftSize)))
         self.window = [Float](repeating: 0, count: fftSize)
         self.sampleBuffer = [Float](repeating: 0, count: fftSize)
@@ -226,7 +247,7 @@ final class SpectrumAnalyzer: ObservableObject {
             self.isLive = false
             self.hasSignal = false
             self.sourceBundleID = nil
-            self.bands = Array(repeating: 0, count: self.bandCount)
+            self.bands.values = Array(repeating: 0, count: self.bandCount)
         }
     }
 
@@ -475,25 +496,36 @@ final class SpectrumAnalyzer: ObservableObject {
     /// Last levels actually handed to SwiftUI, for the change gate below.
     private var lastPublished: [Float] = []
 
-    /// Publish to SwiftUI at ~30 fps regardless of the (faster) audio callback
-    /// — but only when something the UI shows would actually change. Without
-    /// the gate, silence still cost 30 main-thread updates a second for an
-    /// unchanged all-zero wave; with it, a quiet system reduces the publisher
-    /// to a float comparison.
+    /// UI update rate. Each publish is one SwiftUI update of the bars (and
+    /// only the bars — see `SpectrumBands`), with `WaveBarsView` easing
+    /// between them. 30 is what the wave was tuned at; 15 was tried while
+    /// hunting the app's idle cost and made no measurable difference, because
+    /// the cost was never in the publish rate.
+    private static let publishesPerSecond: Double = 30
+    /// How much a band has to move before it's worth a redraw. The old 0.004
+    /// was below the level of a single displayed pixel on these bars, so
+    /// dither in a quiet passage still forced the full update rate.
+    private static let publishEpsilon: Float = 0.02
+
+    /// Publish to SwiftUI at `publishesPerSecond` regardless of the (faster)
+    /// audio callback — but only when something the UI shows would actually
+    /// change. Without the gate, silence still cost a main-thread update per
+    /// frame for an unchanged all-zero wave; with it, a quiet system reduces
+    /// the publisher to a float comparison.
     private func publishIfDue() {
         let now = CACurrentMediaTime()
-        guard now - lastPublish >= 1.0 / 30 else { return }
+        guard now - lastPublish >= 1.0 / Self.publishesPerSecond else { return }
         let signalNow = now - lastSignalTime < Self.signalHoldSeconds
         let changed = signalNow != hasSignal
             || lastPublished.count != smoothed.count
-            || zip(smoothed, lastPublished).contains { abs($0 - $1) > 0.004 }
+            || zip(smoothed, lastPublished).contains { abs($0 - $1) > Self.publishEpsilon }
         guard changed else { return }
         lastPublish = now
         lastPublished = smoothed
         let snapshot = spatiallySmoothed(smoothed).map { CGFloat($0) }
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.bands = snapshot
+            self.bands.values = snapshot
             if self.hasSignal != signalNow { self.hasSignal = signalNow }
         }
     }

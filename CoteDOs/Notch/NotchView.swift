@@ -625,21 +625,27 @@ private struct CollapsedView: View {
                     // are user-tunable; the bars spread evenly across the
                     // width, so fewer bars simply means wider gaps.
                     let barCount = settings.pillSpectrumBarCount
-                    let waveWidth = CGFloat(settings.pillSpectrumWidth)
+                    let waveWidth = NotchLayout.pillSpectrumEffectiveWidth(
+                        barCount: barCount, requestedWidth: settings.pillSpectrumWidth)
                     let spacing = barCount > 1
                         ? (waveWidth - CGFloat(barCount) * NotchLayout.collapsedWaveBarWidth) / CGFloat(barCount - 1)
                         : 0
-                    WaveBarsView(
+                    LiveWaveBarsView(
+                        levels: spectrum.bands,
+                        isLive: spectrum.isLive,
                         isActive: nowPlaying.screensAwake,
                         tint: waveTint,
                         secondaryTint: showsTrackArtwork ? nowPlaying.artworkSecondaryColor : nil,
                         tertiaryTint: showsTrackArtwork ? nowPlaying.artworkTertiaryColor : nil,
                         coverBars: showsTrackArtwork ? nowPlaying.coverBars : nil,
-                        bands: spectrum.isLive ? spectrum.bands : nil,
                         count: barCount,
                         maxHeight: NotchLayout.collapsedWideWaveMaxHeight,
                         barWidth: NotchLayout.collapsedWaveBarWidth,
-                        spacing: max(NotchLayout.collapsedWaveSpacing, spacing)
+                        spacing: max(NotchLayout.collapsedWaveSpacing, spacing),
+                        // The pill draws all day; an offscreen render target
+                        // per frame costs more here than it saves. See
+                        // `WaveBarsView.flattensToLayer`.
+                        flattensToLayer: false
                     )
                     .frame(width: waveWidth, height: NotchLayout.collapsedWideWaveFrameHeight)
                     .transition(.opacity.combined(with: .scale(scale: 0.85)))
@@ -681,17 +687,19 @@ private struct CollapsedView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.6)))
                 }
                 if !settings.pillSpectrumOnly {
-                    WaveBarsView(
+                    LiveWaveBarsView(
+                        levels: spectrum.bands,
+                        isLive: spectrum.isLive,
                         isActive: nowPlaying.screensAwake,
                         tint: waveTint,
                         secondaryTint: showsTrackArtwork ? nowPlaying.artworkSecondaryColor : nil,
                         tertiaryTint: showsTrackArtwork ? nowPlaying.artworkTertiaryColor : nil,
                         coverBars: showsTrackArtwork ? nowPlaying.coverBars : nil,
-                        bands: spectrum.isLive ? spectrum.bands : nil,
                         count: NotchLayout.collapsedWaveBarCount,
                         maxHeight: NotchLayout.collapsedWaveMaxHeight,
                         barWidth: NotchLayout.collapsedWaveBarWidth,
-                        spacing: NotchLayout.collapsedWaveSpacing
+                        spacing: NotchLayout.collapsedWaveSpacing,
+                        flattensToLayer: false
                     )
                     .frame(width: NotchLayout.collapsedWavesWidth, height: NotchLayout.collapsedArtworkWidth)
                     .transition(.opacity)

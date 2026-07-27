@@ -42,7 +42,13 @@ final class SafariFullscreenMonitor {
     private(set) var current: DodgeState?
 
     private static let safariBundleID = "com.apple.Safari"
-    private static let pollInterval: TimeInterval = 1.0
+    /// The poll is only a fallback — app activation and Space changes already
+    /// have notifications, and this catches the rest (a toolbar that moves
+    /// without either). Every tick with Safari frontmost walks its AX tree
+    /// across the process boundary, which wakes Safari too, so it runs at
+    /// half the old rate; the dodge doesn't need sub-second latency for the
+    /// cases no notification covers.
+    private static let pollInterval: TimeInterval = 2.0
     /// How deep below the toolbar to search for the URL text field. Safari
     /// nests the field a few groups down; the cap keeps a changed hierarchy
     /// from turning into a full-tree walk.
@@ -85,9 +91,18 @@ final class SafariFullscreenMonitor {
 
     /// Plain-file diagnostics (`/tmp/cotedos-dodge.log`): written only while
     /// Safari is frontmost, so a failing guard is visible without the unified
-    /// log's redaction. Cheap enough to stay on — one line per second at most.
-    private func dlog(_ message: String) {
-        let line = "\(Date()) \(message)\n"
+    /// log's redaction.
+    ///
+    /// Debug-only. "One line per second at most, cheap enough to stay on" was
+    /// wrong twice over: it's two lines per poll, and each one opens, seeks,
+    /// writes and closes the file. In a release build, with Safari frontmost
+    /// all day, that ran forever and grew the log without bound (1.5 MB of
+    /// "url field not found" when this was found).
+    /// `@autoclosure` so a release build doesn't even build the interpolated
+    /// string it would then throw away.
+    private func dlog(_ message: @autoclosure () -> String) {
+        #if DEBUG
+        let line = "\(Date()) \(message())\n"
         let path = "/tmp/cotedos-dodge.log"
         guard let data = line.data(using: .utf8) else { return }
         if let handle = FileHandle(forWritingAtPath: path) {
@@ -97,6 +112,7 @@ final class SafariFullscreenMonitor {
         } else {
             try? data.write(to: URL(fileURLWithPath: path))
         }
+        #endif
     }
 
     // MARK: Positioning

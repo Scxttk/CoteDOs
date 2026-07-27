@@ -8,6 +8,13 @@ import SwiftUI
 /// way to look at a frozen frame of it (and to let a review judge colour
 /// choices) without pointing a camera at the screen. The assertions just pin
 /// that every style renders at all.
+///
+/// Comparing a PNG against one from an earlier run only works when *the same
+/// tests* ran in both: a preceding `ImageRenderer` pass in the same process
+/// shifts later output by up to 5/255 on a few percent of pixels (invisible,
+/// but enough to change the checksum). Run one test method in isolation on
+/// both sides of a before/after comparison, or compare pixels with a
+/// tolerance.
 @MainActor
 final class WaveBarsSnapshotTests: XCTestCase {
 
@@ -63,5 +70,73 @@ final class WaveBarsSnapshotTests: XCTestCase {
             let png = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
             try png.write(to: Self.outputDirectory.appendingPathComponent("wave-\(style.rawValue).png"))
         }
+    }
+
+    /// A stand-in for what `ArtworkColor` quantises out of a real sleeve:
+    /// mostly two-tone columns, plus a couple that landed on a single colour
+    /// (the case the bar's own gradient has to rescue).
+    private func coverPalette(count: Int) -> CoverBarPalette {
+        let colors: [Color] = [
+            Color(hue: 0.08, saturation: 0.80, brightness: 0.90),
+            Color(hue: 0.55, saturation: 0.70, brightness: 0.80),
+            Color(hue: 0.75, saturation: 0.65, brightness: 0.85),
+        ]
+        let row = (0..<count).map { index -> CoverBarPalette.Bar in
+            let top = colors[index % colors.count]
+            // Every third column quantises to one colour top and bottom.
+            let bottom = index % 3 == 0 ? top : colors[(index + 1) % colors.count]
+            return CoverBarPalette.Bar(top: top, bottom: bottom)
+        }
+        return CoverBarPalette(bars: [count: row])
+    }
+
+    /// `.coverImage` with an actual quantised palette — the branch the style
+    /// sweep above cannot reach, since it passes no `coverBars` and the style
+    /// therefore renders its no-artwork fallback. Worth a frame of its own:
+    /// this is the path where a bar's shading is precomputed alongside the
+    /// palette instead of derived while drawing.
+    func testCoverImageStyleRendersItsQuantisedPalette() throws {
+        let settings = UserSettings.shared
+        let originalStyle = settings.spectrumStyle
+        defer { settings.spectrumStyle = originalStyle }
+        settings.spectrumStyle = .coverImage
+
+        try FileManager.default.createDirectory(at: Self.outputDirectory, withIntermediateDirectories: true)
+
+        let count = NotchLayout.collapsedWideWaveBarCount
+        let wave = WaveBarsView(
+            isActive: true,
+            tint: Color(hue: 0.08, saturation: 0.80, brightness: 0.90),
+            coverBars: coverPalette(count: count),
+            bands: bands,
+            count: count,
+            maxHeight: NotchLayout.collapsedWideWaveMaxHeight,
+            barWidth: NotchLayout.collapsedWaveBarWidth,
+            spacing: NotchLayout.collapsedWaveSpacing
+        )
+        .frame(width: NotchLayout.collapsedWideWavesWidth, height: NotchLayout.collapsedWideWaveFrameHeight)
+        .padding(14)
+        .background(Color.black)
+
+        let renderer = ImageRenderer(content: wave)
+        renderer.scale = 8
+        let image = try XCTUnwrap(renderer.cgImage, "coverImage with a palette failed to render")
+        let rep = NSBitmapImageRep(cgImage: image)
+        let png = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
+        try png.write(to: Self.outputDirectory.appendingPathComponent("wave-coverImage-palette.png"))
+    }
+
+    /// Neighbouring bars over the same region of a cover quantise to the same
+    /// colour — that bundling is deliberate — so a column whose two halves
+    /// landed on one palette entry must still get a gradient, spread by
+    /// brightness, rather than reading as a flat slab.
+    func testASingleColourColumnStillGetsAGradientFoot() {
+        let color = Color(hue: 0.55, saturation: 0.70, brightness: 0.80)
+        let flat = CoverBarPalette.Bar(top: color, bottom: color)
+        XCTAssertNotEqual(flat.foot, color, "a single-colour column must not render as one flat colour")
+
+        let other = Color(hue: 0.08, saturation: 0.80, brightness: 0.90)
+        let twoTone = CoverBarPalette.Bar(top: color, bottom: other)
+        XCTAssertEqual(twoTone.foot, other, "a two-tone column keeps the cover's own second colour")
     }
 }

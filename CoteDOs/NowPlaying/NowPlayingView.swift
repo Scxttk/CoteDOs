@@ -85,13 +85,15 @@ struct NowPlayingView: View {
             // shows someone else's audio moving under the paused track: `bands`
             // must never be passed live when `isActive` is false, since
             // `WaveBarsView` ignores `isActive` once it has real band data.
-            WaveBarsView(
+            LiveWaveBarsView(
+                levels: spectrum.bands,
+                isLive: spectrum.isLive,
+                showsLiveBands: nowPlaying.isPlaying,
                 isActive: nowPlaying.isPlaying && nowPlaying.screensAwake,
                 tint: nowPlaying.track != nil ? nowPlaying.artworkColor : nil,
                 secondaryTint: nowPlaying.track != nil ? nowPlaying.artworkSecondaryColor : nil,
                 tertiaryTint: nowPlaying.track != nil ? nowPlaying.artworkTertiaryColor : nil,
                 coverBars: nowPlaying.track != nil ? nowPlaying.coverBars : nil,
-                bands: (nowPlaying.isPlaying && spectrum.isLive) ? spectrum.bands : nil,
                 count: 6
             )
             .frame(width: 34, height: 30)
@@ -298,6 +300,49 @@ private struct ControlButton: View {
     }
 }
 
+/// `WaveBarsView` fed from the live tap. It exists as a view of its own so the
+/// band updates — 15 a second — invalidate the bars and nothing else: the
+/// levels live on their own observable (`SpectrumBands`), and this is the only
+/// place that observes it. Wrap the wave in this instead of reading
+/// `spectrum.bands.values` from a parent, or the parent starts re-rendering at
+/// the tap's rate again and takes the whole notch with it.
+struct LiveWaveBarsView: View {
+    @ObservedObject var levels: SpectrumBands
+    /// False when the tap isn't running (no permission, macOS < 14.4, …) —
+    /// the wave then falls back to its procedural animation.
+    var isLive: Bool
+    /// Additional gate for callers that must not show *someone else's* audio,
+    /// e.g. the music tab while its own player is paused.
+    var showsLiveBands: Bool = true
+
+    var isActive: Bool
+    var tint: Color?
+    var secondaryTint: Color?
+    var tertiaryTint: Color?
+    var coverBars: CoverBarPalette?
+    var count: Int = 4
+    var maxHeight: CGFloat = 26
+    var barWidth: CGFloat = 3
+    var spacing: CGFloat = 3
+    var flattensToLayer: Bool = true
+
+    var body: some View {
+        WaveBarsView(
+            isActive: isActive,
+            tint: tint,
+            secondaryTint: secondaryTint,
+            tertiaryTint: tertiaryTint,
+            coverBars: coverBars,
+            bands: (isLive && showsLiveBands) ? levels.values : nil,
+            count: count,
+            maxHeight: maxHeight,
+            barWidth: barWidth,
+            spacing: spacing,
+            flattensToLayer: flattensToLayer
+        )
+    }
+}
+
 /// Frequency bars for the now-playing wave. When `bands` carries real spectrum
 /// data (from `SpectrumAnalyzer`) the bars reflect the song's actual frequencies;
 /// otherwise they fall back to a procedural animation. Tinted to the cover's
@@ -320,8 +365,19 @@ struct WaveBarsView: View {
     var maxHeight: CGFloat = 26
     var barWidth: CGFloat = 3
     var spacing: CGFloat = 3
+    /// Rasterize the whole run into one GPU-composited layer (`drawingGroup`).
+    /// Worth it for a wave that only exists while the panel is open: it keeps
+    /// CoreGraphics from shading every bar's gradient and glow on the main
+    /// thread during the expand animation. *Not* worth it for the collapsed
+    /// pill, which draws a handful of tiny capsules but does so all day — there
+    /// the offscreen render target is allocated and waited on every frame, and
+    /// `sample` showed exactly that (`RBLayer display` → `wait_for_allocations`)
+    /// sitting at the top of the main thread while the pill idled.
+    var flattensToLayer: Bool = true
 
     @ObservedObject private var settings = UserSettings.shared
+    /// Decides whether the bars ease between updates — see the `body` comment.
+    @ObservedObject private var power = PowerSource.shared
 
     /// Per-bar fill, top-to-bottom gradient as before, but the *base* colour
     /// now depends on the chosen spectrum style: same for every bar (`.solid`,
@@ -356,41 +412,105 @@ struct WaveBarsView: View {
         return stops.map(Color.stageVivid)
     }
 
+    /// One bar's colours, resolved once per view update rather than per bar per
+    /// frame. Everything in here is independent of the bar's current level, so
+    /// the only colour work left in the draw path is the tip whitening — and
+    /// `HSB` does that as arithmetic, with no trip through NSColor/ColorSync.
+    private struct BarInk {
+        /// The bar's body colour, byte-for-byte what the old per-frame path
+        /// produced for this style.
+        let base: Color
+        let baseHSB: HSB
+        /// What the bar's top-to-bottom gradient ends on.
+        let foot: Color
+
+        /// Depth: full colour at the tip falling to ~72% brightness at the
+        /// base, so a tall bar reads as lit from its top rather than printed.
+        init(_ color: Color) {
+            let hsb = HSB(color)
+            self.base = color
+            self.baseHSB = hsb
+            self.foot = hsb.brightnessScaled(0.72)
+        }
+
+        /// For styles that *derive* the colour and therefore already know its
+        /// components — no decomposition needed at all.
+        init(hsb: HSB) {
+            self.base = hsb.color
+            self.baseHSB = hsb
+            self.foot = hsb.brightnessScaled(0.72)
+        }
+
+        /// The `.coverImage` style: the quantised cover column, whose shading
+        /// was worked out once when the palette was built (see `CoverBarPalette.Bar`).
+        init(coverBar: CoverBarPalette.Bar) {
+            self.base = coverBar.top
+            self.baseHSB = coverBar.topHSB
+            self.foot = coverBar.foot
+        }
+    }
+
     // iOS's Dynamic Island wave bars are flat, fully-opaque colour top to
     // bottom — no fade. Ours used to fade each bar down to 55% opacity, which
     // (combined with how thin these bars are) made the colour nearly
-    // impossible to actually see. Now returns one solid colour per bar.
-    private func barColor(forBarAt index: Int, total: Int) -> Color {
+    // impossible to actually see. Now one solid colour per bar.
+    /// The whole run's colours. Built once per update: the old code derived
+    /// each bar's colour inside the draw call, which meant four ColorSync
+    /// round-trips per bar per frame — ~2900/s for the 32-bar pill at 30 fps,
+    /// and the single biggest item in a `sample` of the idling app.
+    private func palette(total: Int) -> [BarInk] {
+        // No tint (no artwork, or the cover's dominant-colour extraction found
+        // no real hue) — default to white rather than a hardcoded accent,
+        // matching `ArtworkColor`'s own "no real colour here" answer.
+        let accent = tint.map(Color.stageVivid) ?? .white
+
         switch settings.spectrumStyle {
-        case .solid, .coverImage:
-            // `.coverImage` only lands here as the no-artwork fallback (with a
-            // cover, the bars carry the quantised palette instead). No tint (no
-            // artwork, or the cover's dominant-colour extraction found no real
-            // hue) — default to white rather than a hardcoded accent, matching
-            // `ArtworkColor`'s own "no real colour here" answer.
-            return tint.map(Color.stageVivid) ?? .white
+        case .coverImage:
+            // With a cover the bars carry the quantised palette; without one
+            // this style falls back to `.solid` behaviour, bar by bar.
+            let fallback = BarInk(accent)
+            guard let coverBars else { return Array(repeating: fallback, count: total) }
+            return (0..<total).map { index in
+                coverBars.bar(forBarAt: index, total: total).map(BarInk.init(coverBar:)) ?? fallback
+            }
+        case .solid:
+            return Array(repeating: BarInk(accent), count: total)
         case .shades:
             // Full saturation across the whole run, brightness climbing left to
             // right — a lit VU ramp. The earlier version desaturated the left
             // bars toward grey (after the iOS reference), which at 16 bars
             // turned half the wave grey; on a black notch, grey reads as off.
-            let t = total > 1 ? Double(index) / Double(total - 1) : 0
-            return Color.brightnessRamp(Color.stageVivid(tint ?? .white), t: t)
+            let lit = HSB(Color.stageVivid(tint ?? .white))
+            return (0..<total).map { index in
+                let t = CGFloat(Self.position(of: index, total: total))
+                return BarInk(hsb: HSB(h: lit.h, s: lit.s, b: lit.b * (0.60 + 0.40 * t)))
+            }
         case .alternating:
-            let stops = gradientStops
-            return stops[index % stops.count]
+            let stops = gradientStops.map(BarInk.init)
+            return (0..<total).map { stops[$0 % stops.count] }
         case .gradient:
-            let t = total > 1 ? Double(index) / Double(total - 1) : 0
-            return Color.multiStop(gradientStops, t: t)
+            let stops = gradientStops.map(HSB.init)
+            return (0..<total).map { index in
+                BarInk(hsb: Self.multiStop(stops, t: Self.position(of: index, total: total)))
+            }
         }
     }
 
-    /// `.coverImage` fill: the bar's quantised cover colour, with a faint
-    /// top-to-bottom gradient. Neighbouring bars over the same region of the
-    /// artwork quantise to the *same* colour — that bundling is the point — so
-    /// when a column's two halves land on one palette entry the gradient is
-    /// spread by brightness instead, keeping each bar from reading as a flat
-    /// slab without reintroducing the old multi-colour smear.
+    /// A bar's place in the run, 0…1.
+    private static func position(of index: Int, total: Int) -> Double {
+        total > 1 ? Double(index) / Double(total - 1) : 0
+    }
+
+    /// `t` (0…1) mapped across an evenly spaced run of `stops` — the wave
+    /// flows through every colour the cover offered, not just two.
+    private static func multiStop(_ stops: [HSB], t: Double) -> HSB {
+        guard stops.count > 1 else { return stops.first ?? HSB(.white) }
+        let clamped = max(0, min(1, t))
+        let scaled = clamped * Double(stops.count - 1)
+        let index = min(stops.count - 2, Int(scaled))
+        return stops[index].mixed(to: stops[index + 1], t: scaled - Double(index))
+    }
+
     /// How far a bar's tip is driven into white at this level: nothing below
     /// 0.7, then ramping to a 60% white blend at full deflection — an
     /// overdriven-VU-meter incandescence that only the beat peaks reach, so
@@ -399,52 +519,19 @@ struct WaveBarsView: View {
         Double(max(0, (min(1, level) - 0.7) / 0.3)) * 0.6
     }
 
-    private func coverFill(forBarAt index: Int, total: Int, level: CGFloat) -> LinearGradient? {
-        guard let pair = coverBars?.pair(forBarAt: index, total: total) else { return nil }
-        let (top, bottom) = pair.top == pair.bottom
-            ? (pair.top, Color.brightnessScaled(pair.bottom, 0.92))
-            : pair
-        return LinearGradient(
-            colors: [Color.whitened(top, incandescence(at: level)), bottom],
-            startPoint: .top, endPoint: .bottom
-        )
-    }
-
-    private func barFill(forBarAt index: Int, total: Int, level: CGFloat) -> AnyShapeStyle {
-        if settings.spectrumStyle == .coverImage, let fill = coverFill(forBarAt: index, total: total, level: level) {
-            return AnyShapeStyle(fill)
-        }
-        // Depth: full colour at the tip falling to ~72% brightness at the
-        // base, so a tall bar reads as lit from its top rather than printed —
-        // and at beat peaks the tip overdrives toward white-hot.
-        let color = barColor(forBarAt: index, total: total)
-        return AnyShapeStyle(LinearGradient(
-            colors: [Color.whitened(color, incandescence(at: level)), Color.brightnessScaled(color, 0.72)],
-            startPoint: .top, endPoint: .bottom
-        ))
-    }
-
-    /// The colour a bar's glow is drawn in — its own body colour, or the
-    /// quantised cover colour for the `.coverImage` style.
-    private func glowColor(forBarAt index: Int, total: Int) -> Color {
-        if settings.spectrumStyle == .coverImage, let pair = coverBars?.pair(forBarAt: index, total: total) {
-            return pair.top
-        }
-        return barColor(forBarAt: index, total: total)
-    }
-
     /// `level` is the band's normalized magnitude (0…1), independent of the
     /// pixel height — it drives the glow.
-    private func bar(_ height: CGFloat, level: CGFloat, index: Int, total: Int) -> some View {
+    private func bar(_ height: CGFloat, level: CGFloat, ink: BarInk) -> some View {
         let boosted = max(0, min(1, level))
+        let heat = incandescence(at: level)
         // The halo bleaches with the tip: a peaking bar throws hotter,
         // whiter light than one idling at its running average.
-        let glow = Color.whitened(
-            glowColor(forBarAt: index, total: total),
-            incandescence(at: level) * 0.5
-        )
+        let glow = ink.baseHSB.whitened(heat * 0.5, original: ink.base)
         return Capsule()
-            .fill(barFill(forBarAt: index, total: total, level: level))
+            .fill(LinearGradient(
+                colors: [ink.baseHSB.whitened(heat, original: ink.base), ink.foot],
+                startPoint: .top, endPoint: .bottom
+            ))
             .frame(width: barWidth, height: height)
             // The spectacle: every bar throws its own light, and louder bands
             // glow harder. On the pure black island this halo is what makes
@@ -481,52 +568,78 @@ struct WaveBarsView: View {
         }
     }
 
+    /// The `drawingGroup` sandwich, applied only where it pays off (see
+    /// `flattensToLayer`). The symmetric padding keeps the flattened canvas
+    /// large enough that the outermost bars' glow isn't clipped at its edge.
+    @ViewBuilder
+    private func flattened(_ content: some View) -> some View {
+        if flattensToLayer {
+            content.padding(8).drawingGroup().padding(-8)
+        } else {
+            content
+        }
+    }
+
     @ViewBuilder
     var body: some View {
         if let bands, !bands.isEmpty {
-            // Real spectrum: bar height follows each band; the analyzer already
-            // smooths, a short animation just eases between UI updates.
+            // Real spectrum: bar height follows each band, eased between
+            // updates so the wave flows instead of stepping — on wall power.
+            //
+            // That ease is the most expensive thing in this app. A new target
+            // arrives before the previous one finishes, so an animation is
+            // permanently in flight, and an in-flight animation makes SwiftUI
+            // re-evaluate its animated attributes on every *display* refresh
+            // (60 Hz) however rarely the bands change — which is why halving
+            // the publish rate changed nothing: the animator, not the
+            // publisher, sets the pace. Measured on one signal, interleaved,
+            // same machine: ~52% of a core with the ease, ~16% without.
+            //
+            // On battery it goes away and the bars step straight to each
+            // published level, which reads as a visibly harder motion.
+            // `PowerSource` decides; the trade is deliberate.
+            //
+            // The real fix is neither: 32 bars are 32 SwiftUI views, so every
+            // animated frame re-evaluates and re-lays-out that whole subtree.
+            // Drawn as one `Canvas` the per-frame cost would collapse and the
+            // ease could stay on always.
             let values = fitted(bands)
-            HStack(alignment: .center, spacing: spacing) {
-                ForEach(values.indices, id: \.self) { i in
-                    bar(max(floorHeight, maxHeight * values[i] * envelope(forBarAt: i, total: values.count)),
-                        level: values[i], index: i, total: values.count)
-                }
-            }
-            .frame(maxHeight: .infinity, alignment: .center)
-            .animation(.easeOut(duration: 0.09), value: values)
-            .animation(.easeInOut(duration: 0.4), value: tint)
-            .animation(.easeInOut(duration: 0.4), value: secondaryTint)
-            .animation(.easeInOut(duration: 0.4), value: tertiaryTint)
-            .animation(.easeInOut(duration: 0.4), value: coverBars)
-            // Flatten the whole wave into one GPU-composited layer. Without
-            // this, every bar's gradient fill and glow shadow is rasterized
-            // by CoreGraphics on the main thread, 30×/s — `sample` showed
-            // rgba64 gradient shading dominating the expand jank. The
-            // symmetric padding keeps the flattened canvas large enough that
-            // the outermost bars' glow isn't clipped at its edge.
-            .padding(8)
-            .drawingGroup()
-            .padding(-8)
-        } else {
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isActive)) { timeline in
-                let time = timeline.date.timeIntervalSinceReferenceDate
+            let inks = palette(total: values.count)
+            flattened(
                 HStack(alignment: .center, spacing: spacing) {
-                    ForEach(0..<count, id: \.self) { index in
-                        let height = proceduralHeight(index: index, time: time)
-                        bar(max(floorHeight, height * envelope(forBarAt: index, total: count)),
-                            level: maxHeight > 0 ? height / maxHeight : 0, index: index, total: count)
+                    ForEach(values.indices, id: \.self) { i in
+                        bar(max(floorHeight, maxHeight * values[i] * envelope(forBarAt: i, total: values.count)),
+                            level: values[i], ink: inks[i])
                     }
                 }
                 .frame(maxHeight: .infinity, alignment: .center)
+                .animation(power.isOnBattery ? nil : .easeOut(duration: 0.09), value: values)
                 .animation(.easeInOut(duration: 0.4), value: tint)
                 .animation(.easeInOut(duration: 0.4), value: secondaryTint)
                 .animation(.easeInOut(duration: 0.4), value: tertiaryTint)
                 .animation(.easeInOut(duration: 0.4), value: coverBars)
-                // Same GPU flattening as the live-bands branch (see above).
-                .padding(8)
-                .drawingGroup()
-                .padding(-8)
+            )
+        } else {
+            // Hoisted out of the timeline closure on purpose: the colours don't
+            // depend on the clock, so they're resolved once per update instead
+            // of on every one of the 30 ticks a second.
+            let inks = palette(total: count)
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isActive)) { timeline in
+                let time = timeline.date.timeIntervalSinceReferenceDate
+                flattened(
+                    HStack(alignment: .center, spacing: spacing) {
+                        ForEach(0..<count, id: \.self) { index in
+                            let height = proceduralHeight(index: index, time: time)
+                            bar(max(floorHeight, height * envelope(forBarAt: index, total: count)),
+                                level: maxHeight > 0 ? height / maxHeight : 0, ink: inks[index])
+                        }
+                    }
+                    .frame(maxHeight: .infinity, alignment: .center)
+                    .animation(.easeInOut(duration: 0.4), value: tint)
+                    .animation(.easeInOut(duration: 0.4), value: secondaryTint)
+                    .animation(.easeInOut(duration: 0.4), value: tertiaryTint)
+                    .animation(.easeInOut(duration: 0.4), value: coverBars)
+                )
             }
         }
     }
@@ -539,93 +652,32 @@ struct WaveBarsView: View {
     }
 }
 
+// The per-bar shading helpers that used to live here (`whitened`,
+// `brightnessScaled`, `hsbMix`, `multiStop`, `brightnessRamp`) moved onto
+// `HSB`: each of them decomposed its `Color` argument on every call, which is
+// a ColorSync round-trip, and the wave called them per bar per frame. They now
+// operate on components resolved once per palette — see `WaveBarsView.BarInk`.
 private extension Color {
-    private var hsb: (h: CGFloat, s: CGFloat, b: CGFloat) {
-        let ns = NSColor(self).usingColorSpace(.deviceRGB) ?? NSColor(self)
-        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        ns.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-        return (h, s, b)
-    }
+    private var hsb: HSB { HSB(self) }
 
     /// The push a colour gets *only when painted as a spectrum bar*: bars are
     /// two points of colour on a pure black field and need stage lighting,
     /// while the same accent stays tone-mapped (calmer) everywhere else —
     /// title glow, placeholder tint. Keeps the hue, forces presence.
     static func stageVivid(_ color: Color) -> Color {
-        let (h, s, b) = color.hsb
+        let c = color.hsb
         // A genuinely neutral colour (white fallback, B/W cover) must stay
         // neutral — saturating it would invent a hue that isn't there.
-        guard s > 0.02 else { return color }
-        return Color(hue: h, saturation: max(0.68, min(0.95, s * 1.3)), brightness: max(0.85, min(1, b * 1.25)))
-    }
-
-    /// Same hue and saturation, brightness climbing from 60% to 100% across
-    /// `t` — the `.shades` VU ramp. Never desaturates: grey bars on a black
-    /// notch read as dead, not quiet.
-    static func brightnessRamp(_ color: Color, t: Double) -> Color {
-        let (h, s, b) = color.hsb
-        let clampedT = CGFloat(max(0, min(1, t)))
-        return Color(hue: h, saturation: s, brightness: b * (0.60 + 0.40 * clampedT))
-    }
-
-    /// Interpolation between two colours in HSB, hue travelling the *shortest
-    /// arc* — RGB interpolation between two saturated hues passes through the
-    /// desaturated middle and turns the wave's centre to mud.
-    static func hsbMix(_ a: Color, _ b: Color, t: Double) -> Color {
-        let ca = a.hsb, cb = b.hsb
-        let fraction = CGFloat(max(0, min(1, t)))
-        var dh = cb.h - ca.h
-        if dh > 0.5 { dh -= 1 }
-        if dh < -0.5 { dh += 1 }
-        var h = (ca.h + dh * fraction).truncatingRemainder(dividingBy: 1)
-        if h < 0 { h += 1 }
-        return Color(
-            hue: h,
-            saturation: ca.s + (cb.s - ca.s) * fraction,
-            brightness: ca.b + (cb.b - ca.b) * fraction
-        )
-    }
-
-    /// `t` (0…1) mapped across an evenly spaced run of `stops` — the wave
-    /// flows through every colour the cover offered, not just two.
-    static func multiStop(_ stops: [Color], t: Double) -> Color {
-        guard stops.count > 1 else { return stops.first ?? .white }
-        let clamped = max(0, min(1, t))
-        let scaled = clamped * Double(stops.count - 1)
-        let index = min(stops.count - 2, Int(scaled))
-        return hsbMix(stops[index], stops[index + 1], t: scaled - Double(index))
-    }
-
-    /// Blend toward white by `amount` (0 = unchanged, 1 = white) in HSB:
-    /// saturation drains as brightness rises, like a colour overdriven into
-    /// incandescence. Used for the white-hot bar tips at beat peaks.
-    static func whitened(_ color: Color, _ amount: Double) -> Color {
-        guard amount > 0 else { return color }
-        let k = min(1, amount)
-        let ns = NSColor(color).usingColorSpace(.deviceRGB) ?? NSColor(color)
-        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        ns.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-        return Color(hue: h, saturation: s * (1 - CGFloat(k)), brightness: b + (1 - b) * CGFloat(k))
-    }
-
-    /// Same hue and saturation, brightness scaled by `factor` (clamped) — used
-    /// to spread a faint gradient across a bar whose cover column quantised to
-    /// a single colour.
-    static func brightnessScaled(_ color: Color, _ factor: Double) -> Color {
-        let ns = NSColor(color).usingColorSpace(.deviceRGB) ?? NSColor(color)
-        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        ns.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-        return Color(hue: h, saturation: s, brightness: min(1, max(0.1, b * CGFloat(factor))))
+        guard c.s > 0.02 else { return color }
+        return Color(hue: c.h, saturation: max(0.68, min(0.95, c.s * 1.3)), brightness: max(0.85, min(1, c.b * 1.25)))
     }
 
     /// A two-tone pair derived from a single base colour: same saturation and
     /// brightness, hue shifted by ~130° so the pair reads as a deliberate
     /// two-tone rather than a harsh full complementary clash.
     static func huePair(from color: Color) -> (Color, Color) {
-        let ns = NSColor(color).usingColorSpace(.deviceRGB) ?? NSColor(color)
-        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        ns.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-        let shifted = Color(hue: (h + 0.36).truncatingRemainder(dividingBy: 1), saturation: s, brightness: b)
+        let c = color.hsb
+        let shifted = Color(hue: (c.h + 0.36).truncatingRemainder(dividingBy: 1), saturation: c.s, brightness: c.b)
         return (color, shifted)
     }
 
