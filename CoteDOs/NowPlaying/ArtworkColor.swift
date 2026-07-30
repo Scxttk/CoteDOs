@@ -518,19 +518,28 @@ enum ArtworkColor {
             return shadedStep(palette[winner].color, level: level)
         }
 
-        // Image rows run top-down, and so do the bars, so row 0 is the bar's
-        // top. Rows are derived lazily per requested count — see
-        // `CoverBarPalette`; the closure captures the finished stage-one
-        // assignment, so a row costs two vote passes, not a re-analysis.
+        // One election over the bar's *whole* column, not one per half.
+        //
+        // Splitting it was an attractive idea — the bar mirrors its slice of
+        // sleeve top to bottom — and it is wrong twice over. It hands the bar's
+        // body colour to whatever occupies the top of the artwork, so a sleeve
+        // with a sky, a letterbox or a bright title bar draws every bar in that
+        // colour: the One Piece sleeve here is red, orange and green, and it
+        // came out cyan. And it does not match the reference anyway. A bar on
+        // the iPhone holds one hue from tip to foot — measured across three
+        // sleeves, the hue moves under 10° over a bar's whole height while its
+        // saturation and brightness drain — so the vertical run is a *drain*,
+        // which `Bar` derives, not a second colour.
+        //
+        // Rows are derived lazily per requested count — see `CoverBarPalette`;
+        // the closure captures the finished stage-one assignment, so a row
+        // costs one vote pass, not a re-analysis.
         return CoverBarPalette { count in
             (0..<count).map { index in
                 let x0 = geometry.x0 + index * geometry.usableX / count
                 let x1 = max(x0 + 1, geometry.x0 + (index + 1) * geometry.usableX / count)
-                let midY = geometry.y0 + geometry.usableY / 2
-                return CoverBarPalette.Bar(
-                    top: barColor(x0: x0, x1: min(x1, geometry.x1), y0: geometry.y0, y1: max(geometry.y0 + 1, midY)),
-                    bottom: barColor(x0: x0, x1: min(x1, geometry.x1), y0: midY, y1: geometry.y1)
-                )
+                let color = barColor(x0: x0, x1: min(x1, geometry.x1), y0: geometry.y0, y1: geometry.y1)
+                return CoverBarPalette.Bar(color: color)
             }
         }
     }
@@ -573,11 +582,8 @@ enum ArtworkColor {
             (0..<count).map { index in
                 let x0 = geometry.x0 + index * geometry.usableX / count
                 let x1 = max(x0 + 1, geometry.x0 + (index + 1) * geometry.usableX / count)
-                let midY = geometry.y0 + geometry.usableY / 2
-                return CoverBarPalette.Bar(
-                    top: barColor(x0: x0, x1: min(x1, geometry.x1), y0: geometry.y0, y1: max(geometry.y0 + 1, midY)),
-                    bottom: barColor(x0: x0, x1: min(x1, geometry.x1), y0: midY, y1: geometry.y1)
-                )
+                let color = barColor(x0: x0, x1: min(x1, geometry.x1), y0: geometry.y0, y1: geometry.y1)
+                return CoverBarPalette.Bar(color: color)
             }
         }
     }

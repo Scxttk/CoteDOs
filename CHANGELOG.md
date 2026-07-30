@@ -69,6 +69,16 @@ the README never mentioned the difference.
     through the ceiling the rest of the app used, and nothing checked. It does
     now — a test holds every bar of four very different synthetic sleeves inside
     the measured band.
+  - **A bar takes its colour from its whole slice of sleeve, not the top half of
+    it.** Each bar used to elect two colours, one per half, and draw from the
+    upper one — so anything occupying the top of the artwork became the wave. A
+    One Piece sleeve of reds, oranges and greens came out cyan, because that is
+    where its sky is, and Ado's pink sleeve came out blue. Running both real
+    covers through the pipeline against the phone's own bars: the phone reads
+    olive → orange, and we now read olive → red → orange where we read cyan six
+    times. A bar holds one hue from tip to foot on the phone — under 10° across
+    its whole height — so the vertical run is a drain, not a second colour, and
+    it is derived rather than elected.
 - **One wave at three sizes.** The pill, the spectrum page and the fullscreen
   takeover are one continuous run that travels and grows, not three renderers
   that hand off to each other. Widening the pill's wave now gives you fewer,

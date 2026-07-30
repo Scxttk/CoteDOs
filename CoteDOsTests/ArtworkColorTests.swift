@@ -210,7 +210,7 @@ final class ArtworkColorTests: XCTestCase {
                 for index in 0..<count {
                     let bar = try XCTUnwrap(palette.bar(forBarAt: index, total: count),
                                             "\(name): no bar at \(index)/\(count)")
-                    for (edge, color) in [("top", bar.top), ("bottom", bar.bottom), ("foot", bar.foot)] {
+                    for (edge, color) in [("body", bar.top), ("foot", bar.foot)] {
                         let (_, saturation, brightness) = try hsb(color)
                         let where_ = "\(name) bar \(index)/\(count) \(edge)"
                         XCTAssertLessThanOrEqual(saturation, 0.40,

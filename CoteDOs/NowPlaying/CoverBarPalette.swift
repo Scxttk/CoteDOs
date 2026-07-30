@@ -35,25 +35,23 @@ struct ArtworkAccents: Equatable {
 /// enough to do on first use.
 final class CoverBarPalette: Equatable {
     struct Bar: Equatable {
+        /// The one colour this bar's slice of sleeve elected.
         let top: Color
-        let bottom: Color
         /// `top` decomposed, so `WaveBarsView`'s per-frame foot work is
         /// arithmetic instead of a ColorSync round-trip (see `HSB`).
         let topHSB: HSB
-        /// What the bar's gradient actually ends on. Neighbouring bars over
-        /// the same region of the artwork quantise to the *same* colour —
-        /// that bundling is the point — so when a column's two halves land on
-        /// one palette entry the gradient is spread by brightness instead,
-        /// keeping the bar from reading as a flat slab. Derived here rather
-        /// than in the view because the palette is built once per cover, off
-        /// the main thread, and then cached.
+        /// What the bar's gradient ends on: the same colour, drained, never a
+        /// second one. A bar on the iPhone holds its hue from tip to foot and
+        /// only loses saturation and light on the way down — measured across
+        /// three sleeves, under 10° of hue over a whole bar. Derived here
+        /// rather than in the view because the palette is built once per cover,
+        /// off the main thread, and then cached.
         let foot: Color
 
-        init(top: Color, bottom: Color) {
-            self.top = top
-            self.bottom = bottom
-            self.topHSB = HSB(top)
-            self.foot = top == bottom ? HSB(bottom).brightnessScaled(0.92) : bottom
+        init(color: Color) {
+            self.top = color
+            self.topHSB = HSB(color)
+            self.foot = HSB(color).brightnessScaled(0.92)
         }
     }
 

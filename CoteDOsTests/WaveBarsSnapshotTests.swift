@@ -116,11 +116,8 @@ final class WaveBarsSnapshotTests: XCTestCase {
             Color(hue: 0.55, saturation: 0.70, brightness: 0.80),
             Color(hue: 0.75, saturation: 0.65, brightness: 0.85),
         ]
-        let row = (0..<count).map { index -> CoverBarPalette.Bar in
-            let top = colors[index % colors.count]
-            // Every third column quantises to one colour top and bottom.
-            let bottom = index % 3 == 0 ? top : colors[(index + 1) % colors.count]
-            return CoverBarPalette.Bar(top: top, bottom: bottom)
+        let row = (0..<count).map { index in
+            CoverBarPalette.Bar(color: colors[index % colors.count])
         }
         return CoverBarPalette(bars: [count: row])
     }
@@ -156,17 +153,23 @@ final class WaveBarsSnapshotTests: XCTestCase {
         }
     }
 
-    /// Neighbouring bars over the same region of a cover quantise to the same
-    /// colour — that bundling is deliberate — so a column whose two halves
-    /// landed on one palette entry must still get a gradient, spread by
-    /// brightness, rather than reading as a flat slab.
-    func testASingleColourColumnStillGetsAGradientFoot() {
+    /// A bar draws as one colour drained toward its foot, never as two. The
+    /// drain is what keeps it from reading as a flat slab; a *second* colour
+    /// there is what made a sleeve with a sky paint cyan bars.
+    func testABarDrainsTowardItsFootRatherThanChangingColour() throws {
         let color = Color(hue: 0.55, saturation: 0.70, brightness: 0.80)
-        let flat = CoverBarPalette.Bar(top: color, bottom: color)
-        XCTAssertNotEqual(flat.foot, color, "a single-colour column must not render as one flat colour")
+        let bar = CoverBarPalette.Bar(color: color)
+        XCTAssertNotEqual(bar.foot, color, "a bar must not render as one flat colour")
 
-        let other = Color(hue: 0.08, saturation: 0.80, brightness: 0.90)
-        let twoTone = CoverBarPalette.Bar(top: color, bottom: other)
-        XCTAssertEqual(twoTone.foot, other, "a two-tone column keeps the cover's own second colour")
+        let ns = { (c: Color) -> (CGFloat, CGFloat) in
+            let n = NSColor(c).usingColorSpace(.deviceRGB)!
+            var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            n.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+            return (h, b)
+        }
+        let (bodyHue, bodyBrightness) = ns(bar.top)
+        let (footHue, footBrightness) = ns(bar.foot)
+        XCTAssertEqual(footHue, bodyHue, accuracy: 0.005, "the foot keeps the bar's hue")
+        XCTAssertLessThan(footBrightness, bodyBrightness, "the foot is the drained end")
     }
 }
