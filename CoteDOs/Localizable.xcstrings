@@ -13,6 +13,18 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "1 file added" } }
       }
     },
+    "activity.guardEnded.input" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Eingabe %@" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Input %@" } }
+      }
+    },
+    "activity.guardEnded.silence" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ton aus %@" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sound off %@" } }
+      }
+    },
     "activity.timerDone" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "„%@“ beendet" } },
@@ -37,6 +49,78 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "System" } }
       }
     },
+    "capture.browser" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aktuelle Browser-Seite erfassen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Capture the current browser page" } }
+      }
+    },
+    "capture.claude" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code im Vault öffnen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Claude Code in the vault" } }
+      }
+    },
+    "capture.failed" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Capture fehlgeschlagen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Capture failed" } }
+      }
+    },
+    "capture.hint" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "→ heutige Daily Note" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "→ today’s daily note" } }
+      }
+    },
+    "capture.mode.open" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Anhängen & in Obsidian öffnen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Append & open in Obsidian" } }
+      }
+    },
+    "capture.mode.silent" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Lautlos anhängen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Append silently" } }
+      }
+    },
+    "capture.open" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "In Obsidian öffnen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open in Obsidian" } }
+      }
+    },
+    "capture.placeholder" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schnelle Notiz …" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Quick note …" } }
+      }
+    },
+    "capture.saved" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "In Daily gespeichert" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Saved to the daily note" } }
+      }
+    },
+    "capture.savedLink" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Link gespeichert" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Link saved" } }
+      }
+    },
+    "capture.setup" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kein Vault konfiguriert.\nEinstellungen → Obsidian" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No vault configured.\nSettings → Obsidian" } }
+      }
+    },
+    "capture.submit" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "An Daily Note anhängen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Append to the daily note" } }
+      }
+    },
     "menu.launchAtLogin" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Bei Anmeldung starten" } },
@@ -45,14 +129,26 @@
     },
     "menu.quit" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "NotchMate beenden" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Quit NotchMate" } }
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Côte d'OS beenden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Quit Côte d'OS" } }
       }
     },
     "menu.settings" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Einstellungen …" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Settings …" } }
+      }
+    },
+    "nowplaying.denied" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kein Zugriff auf den Player" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No access to the player" } }
+      }
+    },
+    "nowplaying.denied.cta" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Automatisierung erlauben" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Allow automation" } }
       }
     },
     "nowplaying.idle" : {
@@ -73,16 +169,52 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Appearance" } }
       }
     },
+    "settings.cover.brightness" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Helligkeit" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Brightness" } }
+      }
+    },
+    "settings.cover.brightnessLevels" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Helligkeitsstufen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Brightness steps" } }
+      }
+    },
+    "settings.cover.header" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Cover-Stil" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cover style" } }
+      }
+    },
+    "settings.cover.hint" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gilt nur für den Stil „Cover“. Änderungen wirken sofort auf den laufenden Titel — am besten bei spielender Musik einstellen." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Applies only to the “Cover” style. Changes take effect on the current track immediately — best adjusted with music playing." } }
+      }
+    },
+    "settings.cover.paletteSize" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Farben" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Colors" } }
+      }
+    },
+    "settings.cover.reset" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zurücksetzen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reset" } }
+      }
+    },
+    "settings.cover.saturation" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sättigung" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Saturation" } }
+      }
+    },
     "settings.data" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Daten" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Data" } }
-      }
-    },
-    "settings.features" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Features" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Features" } }
       }
     },
     "settings.general" : {
@@ -105,8 +237,8 @@
     },
     "settings.liveActivities" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Live Activities" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Live Activities" } }
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Live Activities (Laden, AirPods, Datei empfangen)" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Live activities (charging, AirPods, file received)" } }
       }
     },
     "settings.mediaSource" : {
@@ -121,16 +253,118 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "“Automatic” picks whichever app is currently playing (Spotify or Apple Music)." } }
       }
     },
+    "settings.notch" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Notch" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Notch" } }
+      }
+    },
+    "settings.notch.display" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Anzeige" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Display" } }
+      }
+    },
     "settings.nowPlaying" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Now Playing" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Now Playing" } }
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Musik" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Music" } }
+      }
+    },
+    "settings.obsidian" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Obsidian" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Obsidian" } }
+      }
+    },
+    "settings.obsidian.behavior" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verhalten" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Behavior" } }
+      }
+    },
+    "settings.obsidian.choose" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wählen …" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose …" } }
+      }
+    },
+    "settings.obsidian.choosePrompt" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Vault wählen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose vault" } }
+      }
+    },
+    "settings.obsidian.dailyFolder" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Daily-Ordner" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Daily folder" } }
+      }
+    },
+    "settings.obsidian.dailyFormat" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Datumsformat" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Date format" } }
+      }
+    },
+    "settings.obsidian.focusHeading" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Fokuszeit-Überschrift" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Focus-time heading" } }
+      }
+    },
+    "settings.obsidian.focusTracking" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Fokuszeit-Presets ins Daily loggen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Log focus presets to the daily note" } }
+      }
+    },
+    "settings.obsidian.heading" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Capture-Überschrift" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Capture heading" } }
+      }
+    },
+    "settings.obsidian.hotkey" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Globaler Hotkey (⌥⌘Space)" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Global hotkey (⌥⌘Space)" } }
+      }
+    },
+    "settings.obsidian.mode" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schreibweise" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Write mode" } }
+      }
+    },
+    "settings.obsidian.noVault" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kein Vault gewählt" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No vault chosen" } }
+      }
+    },
+    "settings.obsidian.target" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ziel" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Target" } }
+      }
+    },
+    "settings.obsidian.timestamp" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zeitstempel voranstellen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Prefix a timestamp" } }
+      }
+    },
+    "settings.obsidian.vault" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Vault-Ordner" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Vault folder" } }
       }
     },
     "settings.resetData" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ablage, Favoriten & Cache zurücksetzen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reset shelf, favorites & cache" } }
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ablage & Cache zurücksetzen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reset shelf & cache" } }
       }
     },
     "settings.resetData.done" : {
@@ -139,10 +373,82 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Reset complete." } }
       }
     },
+    "settings.spectrum.colorA" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Akzentfarbe 1" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Accent color 1" } }
+      }
+    },
+    "settings.spectrum.colorB" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Akzentfarbe 2" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Accent color 2" } }
+      }
+    },
+    "settings.spectrum.colorSource" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Farbquelle" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Color source" } }
+      }
+    },
+    "settings.spectrum.header" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sound-Spektrum" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Audio spectrum" } }
+      }
+    },
+    "settings.spectrum.hint" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "„Nur Spektrum“ ersetzt das Mini-Cover in der eingeklappten Notch durch ein breiteres Spektrum mit mehr Balken — der Musik-Tab behält sein Cover. „Vom Cover“ leitet die zweite Farbe automatisch aus dem Album-Akzent ab. Der Bildschirmschoner übernimmt den Bildschirm, kurz bevor der Mac das Display abschaltet — nur wenn gerade Ton läuft. Er hält den Bildschirm wach; sobald du etwas anfasst oder die Musik aus ist, sperrt der Mac." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "“Spectrum instead of the cover” swaps the mini cover in the collapsed notch for a wider spectrum with more bars — the music tab keeps its cover. “From the cover” derives the second color from the album accent automatically. The screen saver takes the screen shortly before the Mac would switch the display off, and only while something is audible. It keeps the screen awake; the moment you touch anything or the music stops, the Mac locks." } }
+      }
+    },
+    "settings.spectrum.pillOnly" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nur Spektrum statt Cover" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Spectrum instead of the cover" } }
+      }
+    },
+    "settings.spectrum.pillWidth" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Breite" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Width" } }
+      }
+    },
+    "settings.spectrum.screensaver" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Als Bildschirmschoner bei Untätigkeit" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Use as a screen saver when idle" } }
+      }
+    },
+    "settings.spectrum.style" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Spektrum-Stil" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Spectrum style" } }
+      }
+    },
     "settings.suppressOSD" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Apple-OSD unterdrücken (experimentell)" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Suppress Apple OSD (experimental)" } }
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Lautstärke & Helligkeit nur in der Notch (Bedienungshilfen nötig)" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Volume & brightness in the notch only (needs Accessibility)" } }
+      }
+    },
+    "settings.tabs.header" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Tabs" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tabs" } }
+      }
+    },
+    "settings.tabs.hint" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Deaktivierte Tabs verschwinden aus der Notch. Mindestens ein Tab bleibt immer aktiv." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disabled tabs vanish from the notch. At least one tab always stays on." } }
+      }
+    },
+    "settings.timer" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Timer" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Timer" } }
       }
     },
     "settings.timer.add" : {
@@ -165,14 +471,38 @@
     },
     "settings.timer.chainHint" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Reihenfolge der Liste bestimmt die Kette beim automatischen Fortsetzen." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "The list order defines the auto-continue chain." } }
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Reihenfolge der Liste bestimmt die Kette beim automatischen Fortsetzen. Die Checkbox markiert Presets, deren Sitzungen als Fokuszeit ins Obsidian-Daily geloggt werden." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The list order defines the auto-continue chain. The checkbox marks presets whose sessions are logged as focus time in the Obsidian daily note." } }
       }
     },
     "settings.timer.countUp" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Aufwärts zählen (verstrichene Zeit)" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Count up (elapsed time)" } }
+      }
+    },
+    "settings.timer.isFocus" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Fokuszeit" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Focus time" } }
+      }
+    },
+    "settings.timer.isFocusHint" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zählt als Fokuszeit" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Counts as focus time" } }
+      }
+    },
+    "settings.timer.minutes" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%lld min" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld min" } }
+      }
+    },
+    "settings.timer.name" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Name" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Name" } }
       }
     },
     "settings.timer.presets" : {
@@ -193,6 +523,12 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Drag files here" } }
       }
     },
+    "shelf.missing" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Datei nicht gefunden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "File not found" } }
+      }
+    },
     "shelf.remove" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Entfernen" } },
@@ -203,12 +539,6 @@
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Teilen …" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Share …" } }
-      }
-    },
-    "shelf.missing" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Datei nicht gefunden" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "File not found" } }
       }
     },
     "source.appleMusic" : {
@@ -229,6 +559,54 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Spotify" } }
       }
     },
+    "spectrum.colorSource.cover" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Vom Cover" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "From the cover" } }
+      }
+    },
+    "spectrum.colorSource.manual" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Manuell" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Manual" } }
+      }
+    },
+    "spectrum.style.alternating" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Alternierend" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Alternating" } }
+      }
+    },
+    "spectrum.style.coverImage" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Cover" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cover" } }
+      }
+    },
+    "spectrum.style.gradient" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verlauf" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gradient" } }
+      }
+    },
+    "spectrum.style.shades" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schattierungen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Shades" } }
+      }
+    },
+    "spectrum.style.solid" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Einfarbig" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Solid" } }
+      }
+    },
+    "tab.capture" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Capture" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Capture" } }
+      }
+    },
     "tab.files" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Ablage" } },
@@ -239,6 +617,12 @@
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Musik" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Music" } }
+      }
+    },
+    "tab.spectrum" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Spectrum" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Spectrum" } }
       }
     },
     "tab.timer" : {

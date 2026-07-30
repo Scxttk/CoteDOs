@@ -1,0 +1,24 @@
+{
+  "sourceLanguage" : "de",
+  "strings" : {
+    "NSAppleEventsUsageDescription" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Côte d'OS steuert Spotify und Apple Music über Apple Events (Wiedergabe, Titelinfo, Cover), liest beim Erfassen Titel und URL der aktuellen Safari- oder Chrome-Seite und öffnet Terminal im Obsidian-Vault." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Côte d'OS controls Spotify and Apple Music through Apple Events (playback, track info, artwork), reads the title and URL of the frontmost Safari or Chrome page when you capture it, and opens Terminal in your Obsidian vault." } }
+      }
+    },
+    "NSAudioCaptureUsageDescription" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Côte d'OS liest das abgespielte Audiosignal mit, um es als Frequenzspektrum darzustellen. Die Analyse passiert vollständig auf diesem Mac — nichts wird aufgezeichnet oder gesendet." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Côte d'OS reads the audio being played so it can draw it as a frequency spectrum. The analysis happens entirely on this Mac — nothing is recorded and nothing is sent anywhere." } }
+      }
+    },
+    "NSHumanReadableCopyright" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Copyright © 2026 Scott Koehler. MIT-Lizenz." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copyright © 2026 Scott Koehler. MIT license." } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

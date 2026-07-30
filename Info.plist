@@ -22,14 +22,16 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Côte d'OS steuert Spotify und Apple Music (Wiedergabe, Titelinfo, Cover) über Apple Events.</string>
+	<string>Côte d'OS steuert Spotify und Apple Music über Apple Events (Wiedergabe, Titelinfo, Cover), liest beim Erfassen Titel und URL der aktuellen Safari- oder Chrome-Seite und öffnet Terminal im Obsidian-Vault.</string>
 	<key>NSAudioCaptureUsageDescription</key>
-	<string>Côte d'OS liest das abgespielte Audiosignal mit, um im Musik-Tab die Frequenzen des Songs als Visualizer darzustellen.</string>
+	<string>Côte d'OS liest das abgespielte Audiosignal mit, um es als Frequenzspektrum darzustellen. Die Analyse passiert vollständig auf diesem Mac — nichts wird aufgezeichnet oder gesendet.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 Scott Koehler. MIT-Lizenz.</string>
 	<key>NSPrincipalClass</key>
