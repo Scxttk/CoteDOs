@@ -129,7 +129,7 @@ That last one is filed under **Audio Recording**, not Microphone. Resetting Micr
 tccutil reset AudioCapture com.scott.notchmate
 ```
 
-## Accessibility
+## Reduce Motion and VoiceOver
 
 Turn on **Reduce Motion** (Accessibility → Display) and the island stops springing — every transition becomes a short crossfade instead. The spectrum keeps moving, because the spectrum is the content rather than decoration; muting it to reduce motion would be like muting a music player.
 
