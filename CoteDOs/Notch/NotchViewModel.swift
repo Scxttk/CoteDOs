@@ -77,18 +77,17 @@ final class NotchViewModel: ObservableObject {
         didSet {
             guard pagesSettled != oldValue else { return }
             guard pagesSettled else { return }
-            // The tab bar is the last thing to arrive: the island opens, the
-            // wave travels into place, and only then does the chrome fade up
-            // around it. Showing all three at once made the wave read as
-            // arriving *behind* an interface that was already there.
             DispatchQueue.main.asyncAfter(deadline: .now() + NotchLayout.chromeRevealDelay) { [weak self] in
                 guard let self, self.pagesSettled else { return }
-                withAnimation(NotchLayout.contentInsertAnimation) { self.chromeRevealed = true }
+                self.chromeRevealed = true
             }
         }
     }
 
-    /// False until the wave has landed, so the tab bar enters last.
+    /// True once the island is not just open but settled — pages mounted, a
+    /// beat past the last spring. The travelling spectrum reads it to tell a
+    /// carousel move from the island merely opening, which look identical in
+    /// state and want opposite exits (see `NotchRootView.waveExitTransition`).
     @Published private(set) var chromeRevealed = false
 
     /// The logical open/closed state — `.band` counts as closed (it's a

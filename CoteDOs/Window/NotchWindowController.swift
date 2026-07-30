@@ -700,11 +700,19 @@ final class NotchWindowController {
             // and the collapsed pill fades in, leave and it fades back out.
             // Expanding (stage two) still needs the pill-rect hover below or
             // the swipe gesture, same as a content-bearing pill.
+            guard let rect = islandScreenRect(expanded: false) else { return }
             if !hasCollapsedContent && !shelf.isDropTargeted {
-                refreshIdlePresence()
+                // A cursor that has already reached the pill is about to open
+                // it, and the expand walk glides the selected glyph 88 pt
+                // across the island. Played over a panel that is still fading
+                // up, that reads as an icon flying in from nowhere rather than
+                // as the pill's own glyph travelling — which is why coming in
+                // fast looked so different from arriving slowly, when the fade
+                // was long finished. Snap it visible instead, the same way a
+                // drag reaching the hidden notch does.
+                refreshIdlePresence(animated: !rect.contains(cursor))
             }
             guard !policy.isHidden else { return }
-            guard let rect = islandScreenRect(expanded: false) else { return }
             let inside = rect.contains(cursor)
             if inside {
                 guard !suppressHover else { return }

@@ -357,8 +357,9 @@ struct NotchRootView: View {
         // labels occupied the same band and drew straight through each other on
         // every collapse. With the hero standing in from `.band` on, the tab bar
         // is gone by the time the island is pill-sized. On the way up it means
-        // the chrome appears only once the island is actually open, which is the
-        // order `chromeRevealed` already wanted.
+        // the tab bar appears only once the island is actually open — with
+        // audio there is no glyph to walk out to its slot, because the pill's
+        // content is the wave, so the row simply crosses in.
         let pillHero = heroContent && (state == .band || state == .solo || state == .condensing)
         let showsExpanded = state != .collapsed && !pillHero
         // Hero content → the tab bar and the pill hero are *different* content,

@@ -40,20 +40,6 @@ struct ExpandedView: View {
     /// materialises into a nearly still island.
     private var showsPages: Bool { viewModel.islandState == .expanded && viewModel.pagesSettled }
 
-    /// Whether the tab row is dressed. Opaque at rest and for the whole way
-    /// down; on the way up it waits for `chromeRevealed`, which is the last beat
-    /// of the opening — the island widens, the wave travels into it, and only
-    /// then does the chrome fade up around them.
-    ///
-    /// `.band` counts as part of the opening, not as a state that shows chrome:
-    /// the expand walk always rests there first, so treating it as "not
-    /// expanded" made the row appear, blink out on reaching `.expanded`, and
-    /// fade back in — the opposite of the intended order.
-    private var chromeVisible: Bool {
-        viewModel.chromeRevealed || viewModel.islandState == .solo
-            || viewModel.islandState == .condensing || viewModel.islandState == .collapsed
-    }
-
     var body: some View {
         VStack(spacing: showsPages ? NotchLayout.expandedRowSpacing : 0) {
             // The tab bar occupies exactly the collapsed pill's band (flush top,
@@ -74,24 +60,13 @@ struct ExpandedView: View {
             // band down without ever resizing it.
             .frame(height: NotchLayout.currentCollapsedHeight)
             .padding(.top, viewModel.islandState == .expanded ? NotchLayout.tabBarTopInset : 0)
-            // Opacity only — the row keeps its layout throughout, so nothing
-            // below it shifts. See `chromeVisible` for when it is dressed.
-            .opacity(chromeVisible ? 1 : 0)
-            // Arriving fades. *Leaving cuts* — and leaving only ever happens on
-            // the way up, at the `.solo` → `.band` hop, where the row goes
-            // hidden and its layout changes in the same breath: the capsule
-            // widens from 74 pt to 380 pt, so the selected icon stops being
-            // centred and takes its slot in the row, 88 pt to the left for
-            // Musik. Animate that and you watch the glyph streak sideways
-            // across an island that is still opening — worse when the pill was
-            // hidden and is fading *in* at the same time, because then it reads
-            // as an icon flying in from nowhere rather than dimming. Cut, and
-            // the row is already home by the time the chrome fades up over it.
-            //
-            // Only the expand walk is touched: on the way down `chromeRevealed`
-            // holds until `.collapsed`, so this value never changes and the
-            // collapse choreography is exactly as it was.
-            .animation(chromeVisible ? NotchLayout.contentInsertAnimation : nil, value: chromeVisible)
+            // No opacity gate on the row: the selected glyph is the pill's
+            // glyph, still on screen, and the opening is the collapse played
+            // backwards. It glides from the capsule's centre out to its slot —
+            // 88 pt, if you were on Musik — while its neighbours fade in behind
+            // it (`tabJoinFadeDelay`). Hiding the row for that move and fading
+            // it back afterwards is what made the icon read as flying away
+            // rather than travelling somewhere.
 
             // The pages live in a carousel that slides as one strip. Unlike
             // insertion/removal transitions this can't get the direction wrong on
