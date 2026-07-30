@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The hardened runtime gates Apple Event *sending* on its own, separately
+	     from TCC: without this the events fail errAEEventNotPermitted (-1743)
+	     and the Automation prompt never even appears, which looks exactly like
+	     a broken Spotify. Senders: NowPlayingSource (Spotify, Music),
+	     ObsidianVault (Safari, Chrome), QuickLaunch (Terminal). -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+	<!-- The CoreAudio process tap reads other processes' output, which the
+	     runtime treats as audio capture even though the TCC service it prompts
+	     for is AudioCapture (Privacy & Security -> Audio Recording), not
+	     Microphone. Without this the tap builds and delivers silence, and a
+	     frozen wave reads as a rendering bug. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+	<!-- Deliberately absent:
+	     - App Sandbox. Half of what this app does is impossible inside a
+	       container: the CGEvent key tap, a process tap of another app's audio,
+	       and reading Safari's window through the Accessibility API.
+	     - cs.disable-library-validation. Library validation only refuses code
+	       signed by a different Team ID; the two dlopen targets
+	       (DisplayServices, login.framework) are Apple platform binaries, so
+	       they load fine and this would weaken the app for nothing.
+	     - cs.allow-jit / allow-unsigned-executable-memory. Nothing here JITs.
+	     - get-task-allow. Notarization rejects it outright, and a Release build
+	       signed with the free team's "Apple Development" identity *does*
+	       carry it: automatic signing issues a development profile that grants
+	       it, whatever the configuration says. Confirmed on this build —
+	         codesign -d --entitlements - --xml CoteDOs.app | plutil -p -
+	       lists it today. Switching CODE_SIGN_IDENTITY to "Developer ID
+	       Application" and exporting with method=developer-id drops it. Check
+	       the artifact before every submission; the configuration alone does
+	       not settle this one. -->
+</dict>
+</plist>
