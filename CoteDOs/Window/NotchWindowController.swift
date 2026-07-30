@@ -61,25 +61,6 @@ final class NotchWindowController {
     /// timer ends — the cursor may not move for minutes.
     private var cancellables: Set<AnyCancellable> = []
 
-    /// Logs the live hover evaluation to a plain file when set (debugging only).
-    /// A file is used instead of NSLog because modern macOS redacts dynamic
-    /// `%@` substitutions in the unified log by default.
-    private let debugHoverLogging = false
-
-    private func debugLog(_ message: String) {
-        let line = "\(Date()) \(message)\n"
-        let url = URL(fileURLWithPath: NSHomeDirectory() + "/notchmate_hover_debug.log")
-        if let data = line.data(using: .utf8) {
-            if let handle = try? FileHandle(forWritingTo: url) {
-                handle.seekToEndOfFile()
-                handle.write(data)
-                try? handle.close()
-            } else {
-                try? data.write(to: url)
-            }
-        }
-    }
-
     /// When the user closes the notch with a swipe-up, suppress hover-expand
     /// until the cursor has left the island once.
     private var suppressHover = false
@@ -185,13 +166,6 @@ final class NotchWindowController {
                 if let screen = self.currentScreen {
                     self.panel.setFrame(self.panelFrame(on: screen), display: true)
                 }
-                return
-            }
-            if note.object as? String == "geometry" {
-                // Arm the TabIcon frame reporter for 4 s, then dump to
-                // /tmp/ledge-geometry.txt (see `DebugGeometry`).
-                DebugGeometry.enabled = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { DebugGeometry.dump() }
                 return
             }
             self.suppressHover = false
@@ -712,9 +686,6 @@ final class NotchWindowController {
         if viewModel.isExpanded {
             guard let rect = islandScreenRect(expanded: true) else { return }
             let inside = rect.contains(cursor)
-            if debugHoverLogging {
-                debugLog("hover expanded rect=\(NSStringFromRect(rect)) cursor=\(NSStringFromPoint(cursor)) inside=\(inside) dropTargeted=\(shelf.isDropTargeted) interactionLocked=\(viewModel.isInteractionLocked)")
-            }
             if inside {
                 collapseWorkItem?.cancel()
                 // Reverse an in-progress collapse walk (no-op once fully open).
@@ -768,9 +739,6 @@ final class NotchWindowController {
             guard !policy.isHidden else { return }
             guard let rect = islandScreenRect(expanded: false) else { return }
             let inside = rect.contains(cursor)
-            if debugHoverLogging {
-                debugLog("hover collapsed rect=\(NSStringFromRect(rect)) cursor=\(NSStringFromPoint(cursor)) inside=\(inside) suppress=\(suppressHover)")
-            }
             if inside {
                 guard !suppressHover else { return }
                 collapseWorkItem?.cancel()

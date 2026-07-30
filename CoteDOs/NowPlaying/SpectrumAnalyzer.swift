@@ -704,14 +704,21 @@ final class SpectrumAnalyzer: ObservableObject {
 
     // MARK: - CoreAudio property helpers
 
+    /// `Unmanaged<CFString>`, not `CFString?`: CoreAudio hands back a +1
+    /// reference the caller owns, and writing it through a raw pointer into a
+    /// managed optional gives ARC nothing to release — one leaked string per
+    /// call, on a path the resume probe walks every 2 s. It is also the only
+    /// warning the build emits ("forming UnsafeMutableRawPointer to a variable
+    /// of type Optional<CFString>"), which is the compiler saying exactly this.
     private func stringProperty(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) -> String? {
-        var value: CFString?
-        var size = UInt32(MemoryLayout<CFString?>.size)
+        var value: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         var addr = AudioObjectPropertyAddress(
             mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain
         )
-        guard AudioObjectGetPropertyData(object, &addr, 0, nil, &size, &value) == noErr else { return nil }
-        return value as String?
+        guard AudioObjectGetPropertyData(object, &addr, 0, nil, &size, &value) == noErr,
+              let value else { return nil }
+        return value.takeRetainedValue() as String
     }
 
     private func tapFormat(_ tap: AudioObjectID) -> AudioStreamBasicDescription? {
@@ -832,17 +839,6 @@ final class SpectrumAnalyzer: ObservableObject {
     /// stream, or nil. Doubles as the resume probe while suspended: "someone is
     /// producing output again" is exactly the signal that makes rebuilding the
     /// tap worthwhile.
-    private func foreignOutputBundleID() -> String? {
-        guard let first = foreignOutputProcesses().first else { return nil }
-        let attributed = Self.attributedBundleID(for: first.bundleID)
-        // The raw ID alongside the attributed one: this is the only place that
-        // shows whether `attributedBundleID`'s WebKit prefix actually covers
-        // what CoreAudio reports for a browser, and which process won a scan
-        // that returns the first match with no priority.
-        trace(first.bundleID == attributed ? "source \(first.bundleID)" : "source \(first.bundleID) → \(attributed)")
-        return attributed
-    }
-
     /// WebKit's audio/GPU XPC helpers (e.g. `com.apple.WebKit.GPU`) are what
     /// CoreAudio actually reports as the running process for any WebKit-based
     /// browser tab — they're spawned on demand and re-parented to `launchd`,

@@ -108,10 +108,6 @@ enum NotchLayout {
     static var pillSpectrumDefaultWidth: Double { Double(pillSpectrumWidth(forBarCount: 6)) }
     static var pillSpectrumMinWidth: Double { Double(pillSpectrumWidth(forBarCount: pillSpectrumBarRange.lowerBound)) }
     static var pillSpectrumMaxWidth: Double { Double(pillSpectrumWidth(forBarCount: pillSpectrumBarRange.upperBound)) }
-    static let collapsedWideWaveBarCount: Int = 16
-    /// Derived, not typed in: the bar pitch is fixed now, so a hardcoded width
-    /// would silently mis-frame the run the moment the gap is retuned.
-    static var collapsedWideWavesWidth: CGFloat { pillSpectrumWidth(forBarCount: collapsedWideWaveBarCount) }
 
     // MARK: Spectrum-only pill proportions
     //
@@ -521,8 +517,6 @@ enum NotchLayout {
     /// iPhone's Dynamic Island floating in the status bar. Identical in both
     /// states so the top edge stays put while the island morphs.
     static let islandTopGap: CGFloat = 2
-    /// Collapsed corner radius = half the pill height, i.e. a true capsule.
-    static var collapsedCornerRadius: CGFloat { collapsedHeight / 2 }
     /// Expanded corner radius — the iPhone's expanded Live Activity uses ~40pt;
     /// slightly tighter here since the panel band is denser.
     static let expandedCornerRadius: CGFloat = 36

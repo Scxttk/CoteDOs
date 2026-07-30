@@ -17,7 +17,9 @@ osascript -e 'quit app "CoteDOs"' 2>/dev/null || true
 sleep 1
 
 rm -rf /Applications/CoteDOs.app
-cp -R "$APP" /Applications/CoteDOs.app
+# ditto, not cp: it preserves the code signature, and a broken signature costs
+# the audio-capture grant with nobody around to click Allow again.
+ditto "$APP" /Applications/CoteDOs.app
 rm -rf "$BUILD_DIR"
 
 echo "Installed /Applications/CoteDOs.app"

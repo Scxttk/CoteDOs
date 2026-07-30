@@ -10,9 +10,9 @@ enum Persistence {
     // MARK: Directories
 
     /// On-disk folder name. Deliberately still "NotchMate" after the Ledge
-    /// rename: the shelf's bookmarks, favorites and thumbnail cache live
-    /// here, and renaming the folder would orphan them for every existing
-    /// install. Invisible legacy, like the bundle identifier.
+    /// rename: the shelf's bookmarks and thumbnail cache live here, and
+    /// renaming the folder would orphan them for every existing install.
+    /// Invisible legacy, like the bundle identifier.
     private static let storageFolderName = "NotchMate"
 
     /// `~/Library/Application Support/NotchMate/`

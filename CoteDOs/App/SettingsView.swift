@@ -59,7 +59,7 @@ private struct GeneralSettings: View {
                     NotificationCenter.default.post(name: .notchMateResetData, object: nil)
                     didReset = true
                 } label: {
-                    Label(String(localized: "settings.resetData", defaultValue: "Ablage, Favoriten & Cache zurücksetzen"), systemImage: "trash")
+                    Label(String(localized: "settings.resetData", defaultValue: "Ablage & Cache zurücksetzen"), systemImage: "trash")
                 }
                 if didReset {
                     Text("settings.resetData.done")

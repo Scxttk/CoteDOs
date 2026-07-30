@@ -5,7 +5,7 @@ import SwiftUI
 /// Aggregates the available media sources into one observable now-playing state.
 /// Picks the active source automatically (or per user preference), replaces the
 /// old 1-second AppleScript polling with notification-driven refreshes plus
-/// local position interpolation, and owns the local favorites list.
+/// local position interpolation.
 final class NowPlayingManager: ObservableObject {
     @Published private(set) var isRunning = false
     @Published private(set) var isPlaying = false
@@ -38,15 +38,6 @@ final class NowPlayingManager: ObservableObject {
     /// against every competing notch app). See `setScreensAwake`.
     @Published private(set) var screensAwake = true
 
-    private var favoriteKeys: Set<String>
-
-    /// Local-only favorite marker. Player AppleScript APIs can't modify the
-    /// service's Liked Songs, so this tracks favorites in-app per song.
-    var isFavorite: Bool {
-        guard let track else { return false }
-        return favoriteKeys.contains(Self.key(for: track))
-    }
-
     private let spotify = SpotifySource()
     private let music = AppleMusicSource()
     private var sources: [ScriptableMediaSource] { [spotify, music] }
@@ -69,7 +60,6 @@ final class NowPlayingManager: ObservableObject {
 
     init(settings: UserSettings = .shared) {
         self.settings = settings
-        self.favoriteKeys = Set(Persistence.load([String].self, from: "favorites.json") ?? [])
         self.active = spotify
     }
 
@@ -281,31 +271,4 @@ final class NowPlayingManager: ObservableObject {
         }
     }
 
-    // MARK: Favorites
-
-    func toggleFavorite() {
-        guard let track else { return }
-        let key = Self.key(for: track)
-        if favoriteKeys.contains(key) {
-            favoriteKeys.remove(key)
-        } else {
-            favoriteKeys.insert(key)
-        }
-        objectWillChange.send()
-        persistFavorites()
-    }
-
-    func clearFavorites() {
-        favoriteKeys.removeAll()
-        objectWillChange.send()
-        persistFavorites()
-    }
-
-    private func persistFavorites() {
-        Persistence.save(Array(favoriteKeys), to: "favorites.json")
-    }
-
-    private static func key(for track: NowPlayingTrack) -> String {
-        "\(track.name)—\(track.artist)"
-    }
 }

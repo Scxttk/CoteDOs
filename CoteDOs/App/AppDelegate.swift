@@ -180,7 +180,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func resetData() {
         shelf.clear()
-        nowPlaying.clearFavorites()
         pomodoro.clear()
     }
 

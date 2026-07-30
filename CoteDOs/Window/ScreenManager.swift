@@ -11,11 +11,4 @@ enum ScreenManager {
         }
         return NSScreen.main ?? NSScreen.screens.first
     }
-
-    /// Whether the given screen has a physical notch (camera housing). Used to
-    /// decide whether to hug the real notch or just float a pill at top-center.
-    static func hasPhysicalNotch(_ screen: NSScreen) -> Bool {
-        // A notched display has a non-zero top safe-area inset.
-        screen.safeAreaInsets.top > 0
-    }
 }

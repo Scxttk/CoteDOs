@@ -15,10 +15,6 @@ final class AudioOutputController: ObservableObject {
     @Published private(set) var devices: [AudioOutputDevice] = []
     @Published private(set) var currentDeviceID: AudioDeviceID = 0
 
-    var currentName: String {
-        devices.first { $0.id == currentDeviceID }?.name ?? ""
-    }
-
     private var defaultListener: AudioObjectPropertyListenerBlock?
     private var deviceListListener: AudioObjectPropertyListenerBlock?
 

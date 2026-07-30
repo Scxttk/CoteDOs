@@ -217,7 +217,7 @@ enum QuickLaunch {
         let script = """
         tell application "Terminal"
             activate
-            do script "cd \(quoted.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")) && claude"
+            do script "cd \(CaptureEscaping.appleScriptEscaped(quoted)) && claude"
         end tell
         """
         let process = Process()
