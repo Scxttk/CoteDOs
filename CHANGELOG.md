@@ -33,9 +33,12 @@ the README never mentioned the difference.
     already holding a display-sleep assertion, it stands down.
   - When an armed run ends it leaves a note in the pill saying *why* and *when* —
     "Input 14:02" on a Mac you left at 13:50 is somebody else.
-- **Fullscreen spectrum, on demand.** ⌥⌘S from anywhere, or a second swipe down
-  on the spectrum tab. The run grows out of the island rather than appearing, and
-  swiping up plays it backwards.
+- **Fullscreen spectrum, on demand.** ⌥⌘S from anywhere, or a click on the
+  spectrum tab. The run grows out of the island rather than appearing, and Escape
+  plays it backwards — home to the pill, not to the page, which is collapsing by
+  then. Swiping is deliberately not a way in: a two-finger swipe opens the island
+  and stops there, because carrying the gesture on into a full-screen visual was
+  too easy to trigger by accident.
 - **The wave belongs to whoever is making the sound.** A Safari video now tints
   the bars with Safari's blue, pulled from its icon through the same colour
   election album art goes through — instead of drawing white, or worse, borrowing

@@ -53,7 +53,9 @@ Every tab can be switched off in Settings if you only came for some of this.
   <img src="assets/spectrum-fullscreen.png" width="760" alt="The spectrum taking over the full screen">
 </p>
 
-⌥⌘S from anywhere, or a second swipe down on the spectrum tab, and the run grows out of the island until it fills the display. Swipe up and it plays backwards.
+⌥⌘S from anywhere, or a click on the spectrum tab, and the run grows out of the island until it fills the display. Escape brings it back, and the wave flies home to the pill rather than to the page it came from — the page is collapsing behind it by then.
+
+Swiping deliberately doesn't do this. A two-finger swipe opens the island and stops there: carrying the same gesture on into a full-screen visual you didn't ask for turned out to be far too easy to trigger by accident.
 
 The part I actually built it for: **leave the Mac alone with music playing and it does this by itself**, fifteen seconds before macOS would blank the display, and holds the screen awake. Touch anything and it shrinks away — and the Mac locks behind it, because locking is the half of display-sleep behaviour it just displaced. Quitting the app while it's up locks too; that's not an escape hatch.
 
