@@ -136,32 +136,28 @@ final class NotchWindowController {
         }
         safariFullscreenMonitor.start()
 
-        // Remote control for visual verification: lets a screen-recording
-        // session drive the *staged* hover walk without a cursor (the capture
-        // hotkey path skips the stages on purpose, so it can't stand in).
-        // Post via:
+        #if DEBUG
+        // Remote control for looking at the real thing: drives the *staged* hover
+        // walk without a cursor, which the capture hotkey can't stand in for
+        // because it skips the stages on purpose. `offset:<pt>` drops the island
+        // below the top edge so a shot has headroom above it; `offset:0` restores
+        // reality (the next Safari-dodge change overwrites it either way).
+        //
         //   osascript -l JavaScript -e 'ObjC.import("Foundation");
         //     $.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately(
         //       "com.scott.ledge.debug.island", "expand", $(), true)'
-        // Harmless surface: it only toggles the island's open state.
+        //
+        // DEBUG-only, and it has to stay that way: a DistributedNotificationCenter
+        // observer is reachable by *any* process on the machine, so in a shipping
+        // build this is an unauthenticated control surface over the UI. It only
+        // opens a notch and nudges a panel, which is why it went unnoticed while
+        // it was in Release.
         DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("com.scott.ledge.debug.island"), object: nil, queue: .main
         ) { [weak self] note in
             guard let self else { return }
-            if note.object as? String == "record" {
-                // Film the panel's own view tree — an app may snapshot its
-                // own window without the Screen Recording permission, which
-                // the harness driving this can't obtain. Frames land in
-                // /tmp/ledge-frames/ for eyes-on frame-by-frame review.
-                self.startDebugRecording()
-                return
-            }
             if let command = note.object as? String, command.hasPrefix("offset:"),
                let value = Double(command.dropFirst("offset:".count)) {
-                // Photo mode: drop the island a fixed distance below the top
-                // edge so screenshots can show it with headroom. Debug-only;
-                // "offset:0" restores reality. The next Safari-dodge change
-                // overwrites it, which is fine for a staged shot.
                 self.panelYOffset = CGFloat(value)
                 if let screen = self.currentScreen {
                     self.panel.setFrame(self.panelFrame(on: screen), display: true)
@@ -171,13 +167,14 @@ final class NotchWindowController {
             self.suppressHover = false
             self.collapseWorkItem?.cancel()
             if note.object as? String == "expand" {
-                // The recorder drives the walk without a cursor — an idle-hidden
-                // panel must un-hide first or it animates at alpha 0.
+                // Driving the walk without a cursor: an idle-hidden panel has to
+                // un-hide first or it animates at alpha 0.
                 self.policy.hideReasons.remove(.idle)
                 self.applyPresence(animated: false)
             }
             self.setExpanded(note.object as? String == "expand")
         }
+        #endif
 
         // Idle-hide reactivity: whatever can change the pill's contents (or
         // land the island back at rest) re-evaluates the idle presence. The
@@ -248,36 +245,6 @@ final class NotchWindowController {
             policy.hideReasons.remove(.idle)
         }
         applyPresence(animated: animated)
-    }
-
-    /// Captures ~1.5 s of the container view at 60 fps into memory, then
-    /// writes the frames as PNGs off the main thread. Debug-only, reachable
-    /// solely via the distributed notification above.
-    private func startDebugRecording() {
-        let frameCount = 90
-        var reps: [NSBitmapImageRep] = []
-        reps.reserveCapacity(frameCount)
-        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
-            guard let self, reps.count < frameCount else {
-                timer.invalidate()
-                let finished = reps
-                DispatchQueue.global(qos: .utility).async {
-                    let dir = URL(fileURLWithPath: "/tmp/ledge-frames", isDirectory: true)
-                    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-                    for (index, rep) in finished.enumerated() {
-                        guard let png = rep.representation(using: .png, properties: [:]) else { continue }
-                        try? png.write(to: dir.appendingPathComponent(String(format: "frame-%03d.png", index)))
-                    }
-                    try? Data().write(to: dir.appendingPathComponent("done"))
-                }
-                return
-            }
-            let bounds = self.container.bounds
-            guard let rep = self.container.bitmapImageRepForCachingDisplay(in: bounds) else { return }
-            self.container.cacheDisplay(in: bounds, to: rep)
-            reps.append(rep)
-        }
-        RunLoop.main.add(timer, forMode: .common)
     }
 
     deinit {
