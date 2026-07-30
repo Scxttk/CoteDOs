@@ -3,7 +3,6 @@ import SwiftUI
 /// A tab's glyph.
 struct TabIcon: View {
     let tab: NotchViewModel.Tab
-    var dimmed = false
 
     var body: some View {
         Image(systemName: tab.icon)
@@ -38,11 +37,33 @@ struct NotchTabBar: View {
     let isOpen: Bool
     /// Observed so the bar re-renders live when tabs are toggled in Settings.
     @ObservedObject private var settings = UserSettings.shared
+    /// Ties the one selection capsule to whichever tab's slot it is standing in.
+    @Namespace private var selectionGeometry
 
     var body: some View {
         HStack(spacing: NotchLayout.tabBarSpacing) {
             ForEach(NotchViewModel.enabledTabs, id: \.self) { value in
                 tab(value)
+            }
+        }
+        .background {
+            // One capsule for the row, borrowing the selected tab's slot —
+            // not a capsule per tab. Per-tab capsules can only ever cross-fade,
+            // one dimming while another lights up two slots over, and the eye
+            // reads that as a blink rather than as a move. A single view
+            // adopting the new slot's frame slides between them, which is what
+            // a segmented control does everywhere else on the system.
+            //
+            // Behind the whole row rather than behind one item, so it is free
+            // to travel across the gaps between them.
+            if isOpen {
+                Capsule(style: .continuous)
+                    .fill(.white.opacity(NotchLayout.tabSelectionFill))
+                    .matchedGeometryEffect(id: selection, in: selectionGeometry, isSource: false)
+                    // Its own, because not every way of changing tabs animates:
+                    // the capture hotkey sets the tab outright, and the capsule
+                    // should still slide when it does.
+                    .animation(NotchLayout.tabChangeAnimation, value: selection)
             }
         }
     }
@@ -59,23 +80,13 @@ struct NotchTabBar: View {
                 // Every icon renders itself, always — switching tabs must only
                 // change the highlight, never replace or move the icon view, or
                 // it visibly pops back in.
-                TabIcon(tab: value, dimmed: !isSelected)
+                TabIcon(tab: value)
                     .frame(width: NotchLayout.tabItemWidth,
                            height: NotchLayout.tabItemHeight)
-                    .background {
-                        // Behind the glyph rather than around it, so the capsule
-                        // can appear and disappear without moving anything: every
-                        // item holds the same frame whether selected or not.
-                        //
-                        // It goes out with the open island, not with the tab bar.
-                        // Left to unmount with the row it survived the whole way
-                        // down — a grey slab filling the pill band, cut off by
-                        // the island's own clip, blinking out on the last frame.
-                        // Nothing is being selected between anyway once the row
-                        // is down to one tab.
-                        Capsule(style: .continuous)
-                            .fill(.white.opacity(isSelected && isOpen ? NotchLayout.tabSelectionFill : 0))
-                    }
+                    // Publishes this slot for the capsule to borrow. Every item
+                    // holds the same frame, selected or not, so the capsule
+                    // arriving cannot move the row it is arriving in.
+                    .matchedGeometryEffect(id: value, in: selectionGeometry, isSource: true)
                     .foregroundStyle(.white.opacity(isSelected ? 1 : NotchLayout.tabInactiveOpacity))
                     .contentShape(Capsule(style: .continuous))
             }
