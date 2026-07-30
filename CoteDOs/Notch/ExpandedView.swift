@@ -47,17 +47,9 @@ struct ExpandedView: View {
             // the hero flight between them is purely horizontal, not diagonal.
             NotchTabBar(
                 selection: $viewModel.selectedTab,
-                // .band/.expanded keep every tab; .solo/.condensing keep
-                // only the selected one. Labels survive until .condensing, where
-                // the text drops and just the icon remains.
-                showsAllTabs: viewModel.islandState == .expanded || viewModel.islandState == .band,
-                // Labels live only in expanded/band/solo. Must be false in
-                // .collapsed too, not just .condensing: while the tab bar is
-                // held opaque during the pill handover, `!= .condensing` would
-                // flip true again and fade the label back in ("Mu" reappears).
-                showsLabels: viewModel.islandState == .expanded
-                    || viewModel.islandState == .band
-                    || viewModel.islandState == .solo
+                // .band/.expanded keep every tab; .solo/.condensing keep only the
+                // selected one, so the capsule can narrow onto it.
+                showsAllTabs: viewModel.islandState == .expanded || viewModel.islandState == .band
             )
             .frame(maxWidth: .infinity)
             .frame(height: NotchLayout.currentCollapsedHeight)

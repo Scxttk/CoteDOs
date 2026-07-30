@@ -260,9 +260,13 @@ final class NotchViewModel: ObservableObject {
     /// width is mirrored as empty space on the left, hence the label counts
     /// twice. The estimate errs generous; slight looseness is harmless,
     /// clipping is not.
+    /// Width of the `.solo` capsule: the same for every tab now that the row is
+    /// icon-only. It used to be the base plus *twice* the title's width — twice,
+    /// because an invisible mirror of the label sat left of the icon to keep it
+    /// centred. No label, no mirror, no per-tab width, and the capsule lands
+    /// much closer to the pill it is handing over to.
     func soloWidth(for tab: Tab) -> CGFloat {
-        let labelWidth = CGFloat(tab.title.count) * NotchLayout.soloLabelCharWidth
-        return NotchLayout.soloBaseWidth + 2 * labelWidth
+        NotchLayout.soloBaseWidth
     }
 
     // The panel keeps a constant size; only the SwiftUI island animates.

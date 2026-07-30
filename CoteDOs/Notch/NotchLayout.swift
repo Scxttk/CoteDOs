@@ -389,9 +389,21 @@ enum NotchLayout {
     /// padding + the two content insets) plus the label's estimated width,
     /// counted twice since the centred icon mirrors the label as empty space.
     static let soloBaseWidth: CGFloat = 74
+    /// Still here because the *solo* stage's own estimate uses it for the pill
+    /// readout, not for the tab row — the tab row has no labels left to measure.
     static let soloLabelCharWidth: CGFloat = 8
 
     /// Roughly what a tab's glyph occupies at `bandFontSize`.
+    /// Point size the tab glyphs are drawn at. Independent of `bandFontSize`
+    /// on purpose: they used to inherit it, and a symbol set at its neighbouring
+    /// text's size always reads smaller than the text.
+    static let tabIconSize: CGFloat = 17
+    /// Tap target and capsule for one tab. Fixed for every tab, selected or not,
+    /// so marking the selection cannot move the row.
+    static let tabItemWidth: CGFloat = 38
+    static let tabItemHeight: CGFloat = 22
+    /// Fill behind the selected tab, standing in for the title it replaced.
+    static let tabSelectionFill: Double = 0.16
     static let tabIconEstimatedWidth: CGFloat = 16
     /// Room the tab row has. Measured against the *band* capsule, not the
     /// expanded one: the same row renders at both widths (the expand and the
@@ -675,4 +687,8 @@ enum NotchLayout {
     /// while the island morph (spring response 0.42) or the tab carousel spring
     /// (response 0.38) is still moving — a SwiftUI placeholder stands in until then.
     static let captureFieldMountDelay: TimeInterval = 0.45
+    /// How wide the capture field is allowed to get. 260 left it floating in the
+    /// middle of a 428 pt page with dead space either side, which read as an
+    /// unfinished layout rather than as a deliberately small target.
+    static let captureFieldWidth: CGFloat = 340
 }

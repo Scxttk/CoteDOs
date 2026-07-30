@@ -148,6 +148,14 @@ final class MarketingShots: XCTestCase {
 
         // --- one tile per tab, on the plate ---------------------------------
         for tab in NotchViewModel.Tab.allCases {
+            // Re-asserted per shot, not set once before the loop. `UserSettings`
+            // is UserDefaults-backed, and the tests run against the host app's own
+            // domain — the same one any copy of Côte d'OS actually running on this
+            // Mac reads and writes. Set once, it gets overwritten mid-run and the
+            // shots come out in whatever style that copy prefers, which is how the
+            // spectrum tab ended up rendering a white wave while the style strip
+            // beside it (which does re-assert) came out in full colour.
+            settings.spectrumStyle = .coverImage
             viewModel.selectedTab = tab
             viewModel.islandState = .expanded
             viewModel.pagesSettled = true
@@ -471,18 +479,47 @@ final class MarketingShots: XCTestCase {
     /// survive that, heights do not — which produces a shot of a flat line of
     /// dots in exactly the right colours, and looks like a layout bug.
     private func feedAudio(_ spectrum: SpectrumAnalyzer) {
-        // 70 blocks ≈ 0.75 s, which is past the warm-up the running averages
-        // need before the levels mean anything. `ingestForTesting` runs the real
-        // FFT and hands back the smoothed levels without publishing them, so the
-        // last frame is pushed into the analyzer's published state explicitly.
+        // 70 blocks ≈ 0.75 s, past the warm-up the running averages need before
+        // the levels mean anything. `ingestForTesting` runs the real FFT and hands
+        // back the smoothed levels without publishing them, so the frame that gets
+        // photographed is chosen explicitly.
         var levels: [Float] = []
-        for _ in 0..<70 {
-            levels = spectrum.ingestForTesting(Self.musicBlock(audioBlock, phase: &audioPhase))
-            audioBlock += 1
+        func feed(_ blocks: Int) {
+            for _ in 0..<blocks {
+                levels = spectrum.ingestForTesting(Self.musicBlock(audioBlock, phase: &audioPhase))
+                audioBlock += 1
+            }
         }
-        spectrum.publishForTesting(levels)
+        feed(70)
+
+        // Then sample a second of frames and photograph the best one. Not a
+        // cheat — it is what you do with a camera — but it does need to be the
+        // *best* and not the last, which is the mistake the first version made:
+        // the synthetic track kicks every 0.5 s, so consecutive frames swing from
+        // empty bass to clipping, and taking whatever frame the loop ended on gave
+        // a wave with its low half at zero and its peaks driven into the wave's
+        // white-hot overdrive. That reads as a colourless, lopsided rendering bug.
+        var best = levels
+        var bestScore = Self.frameScore(levels)
+        for _ in 0..<24 {
+            feed(4)
+            let score = Self.frameScore(levels)
+            if score < bestScore { bestScore = score; best = levels }
+        }
+        spectrum.publishForTesting(best)
         settle(0.1)
     }
+
+    /// Lower is better: peak near 0.8 — high enough to look alive, below the
+    /// level where the wave whitens its tips — and the low bands carrying
+    /// something, because a spectrum with a dead bass end does not read as music.
+    private static func frameScore(_ levels: [Float]) -> Float {
+        guard levels.count > 8 else { return .greatestFiniteMagnitude }
+        let peak = levels.max() ?? 0
+        let low = levels.prefix(6).max() ?? 0
+        return abs(peak - 0.62) + 2 * max(0, 0.40 - low)
+    }
+
 
     private var audioBlock = 0
 

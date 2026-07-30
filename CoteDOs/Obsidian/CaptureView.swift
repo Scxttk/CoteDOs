@@ -60,31 +60,28 @@ struct CaptureView: View {
     }
 
     private var captureField: some View {
-        VStack(spacing: 8) {
-            // Above the pill: which vault this lands in.
+        VStack(spacing: 10) {
+            // One line, not two. This used to be the vault name above the field
+            // and "→ today's daily note" below it, both at 9–10 pt and 40 %
+            // opacity — two separate whispers saying one thing between them,
+            // with the field stranded in the middle. Said once, at a size you
+            // can actually read, it becomes a caption instead of clutter.
             HStack(spacing: 5) {
                 Image(systemName: "shippingbox")
-                    .font(.system(size: 9))
+                    .font(.system(size: 10))
                 Text(vaultDisplayName)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 11, weight: .semibold))
+                Text(String(localized: "capture.hint", defaultValue: "→ heutige Daily Note"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.45))
             }
-            .foregroundStyle(.white.opacity(0.4))
+            .foregroundStyle(.white.opacity(0.7))
 
             pill
-                .frame(maxWidth: 260)
+                .frame(maxWidth: NotchLayout.captureFieldWidth)
 
-            // Below the pill: destination hint + shortcuts (moved here from the
-            // island's top-right corner).
-            HStack(spacing: 12) {
-                Text(String(localized: "capture.hint", defaultValue: "→ heutige Daily Note"))
-                    .font(.system(size: 9))
-                    .foregroundStyle(.white.opacity(0.4))
-                Circle()
-                    .fill(Color.white.opacity(0.25))
-                    .frame(width: 2.5, height: 2.5)
-                CaptureIconButton(systemName: "diamond", help: String(localized: "capture.open", defaultValue: "In Obsidian öffnen")) {
-                    openVaultInObsidian()
-                }
+            HStack(spacing: 16) {
+                OpenInObsidianButton(action: openVaultInObsidian)
                 QuickLaunchButton()
             }
         }
@@ -94,10 +91,10 @@ struct CaptureView: View {
     /// The capsule around the input. While `fieldLive` is false a SwiftUI-only
     /// placeholder stands in for the AppKit-backed `TextField` (see header doc).
     private var pill: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 9) {
             Image(systemName: "square.and.pencil")
-                .font(.system(size: 13))
-                .foregroundStyle(.white.opacity(0.5))
+                .font(.system(size: 14))
+                .foregroundStyle(.white.opacity(0.55))
 
             if fieldLive {
                 TextField(
@@ -105,14 +102,14 @@ struct CaptureView: View {
                     text: $text
                 )
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(.system(size: 14))
                 .foregroundStyle(.white)
                 .focused($fieldFocused)
                 .onSubmit(submit)
             } else {
                 Text(text.isEmpty ? String(localized: "capture.placeholder", defaultValue: "Schnelle Notiz …") : text)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(text.isEmpty ? 0.35 : 1))
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white.opacity(text.isEmpty ? 0.4 : 1))
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -123,8 +120,8 @@ struct CaptureView: View {
             CaptureIconButton(systemName: "arrow.up.circle.fill", help: String(localized: "capture.submit", defaultValue: "An Daily Note anhängen"), prominent: true, action: submit)
                 .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 11)
         .background(Capsule().fill(Color.white.opacity(0.10)))
         .overlay(Capsule().strokeBorder(Color.white.opacity(fieldFocused ? 0.35 : 0.12), lineWidth: 1))
     }
@@ -239,26 +236,53 @@ enum QuickLaunch {
     }
 }
 
+/// Opens a Terminal in the vault and starts Claude Code.
+///
+/// Draws a terminal, not Obsidian's icon. It used to show Obsidian's — which is
+/// installed on the machines this feature is for, so the button that does *not*
+/// open Obsidian was the one wearing Obsidian's face, sitting next to the button
+/// that does.
 struct QuickLaunchButton: View {
     var body: some View {
         Button {
             Haptics.perform(.alignment)
             QuickLaunch.openClaudeInVault()
         } label: {
+            Image(systemName: "terminal")
+                .font(.system(size: 14))
+                .foregroundStyle(.white.opacity(0.75))
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(String(localized: "capture.claude", defaultValue: "Claude Code im Vault öffnen"))
+        .accessibilityLabel(String(localized: "capture.claude", defaultValue: "Claude Code im Vault öffnen"))
+    }
+}
+
+/// Opens the vault in Obsidian, wearing Obsidian's own icon where it can — the
+/// `diamond` symbol is a passable stand-in for the logo, but the real app icon
+/// is unmistakable and it is right there on disk.
+struct OpenInObsidianButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
             Group {
                 if let icon = QuickLaunch.obsidianIcon {
                     Image(nsImage: icon).resizable().scaledToFit()
                 } else {
-                    Image(systemName: "terminal")
+                    Image(systemName: "diamond")
                         .resizable().scaledToFit()
                         .padding(3)
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(.white.opacity(0.75))
                 }
             }
-            .frame(width: 22, height: 22)
-            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .frame(width: 20, height: 20)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(String(localized: "capture.claude", defaultValue: "Claude Code im Vault öffnen"))
+        .help(String(localized: "capture.open", defaultValue: "In Obsidian öffnen"))
+        .accessibilityLabel(String(localized: "capture.open", defaultValue: "In Obsidian öffnen"))
     }
 }
