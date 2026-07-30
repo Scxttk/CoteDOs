@@ -97,7 +97,7 @@ final class NotchWindowController {
     /// (trackpad momentum keeps firing events; we only act on a fresh gesture).
     private var lastHorizontalScroll = Date.distantPast
 
-    init(viewModel: NotchViewModel, nowPlaying: NowPlayingManager, shelf: FileShelfModel, activities: ActivityManager, pomodoro: PomodoroManager, capture: ObsidianCapture, spectrum: SpectrumAnalyzer, claudeUsage: ClaudeUsageModel, claudeDriver: ClaudeSessionDriver) {
+    init(viewModel: NotchViewModel, nowPlaying: NowPlayingManager, shelf: FileShelfModel, activities: ActivityManager, pomodoro: PomodoroManager, capture: ObsidianCapture, spectrum: SpectrumAnalyzer) {
         self.viewModel = viewModel
         self.nowPlaying = nowPlaying
         self.shelf = shelf
@@ -108,7 +108,7 @@ final class NotchWindowController {
         let frame = NSRect(x: 0, y: 0, width: viewModel.panelWidth, height: viewModel.panelHeight)
         panel = NotchPanel(contentRect: frame)
 
-        let root = NotchRootView(viewModel: viewModel, nowPlaying: nowPlaying, shelf: shelf, activities: activities, pomodoro: pomodoro, capture: capture, spectrum: spectrum, claudeUsage: claudeUsage, claudeDriver: claudeDriver)
+        let root = NotchRootView(viewModel: viewModel, nowPlaying: nowPlaying, shelf: shelf, activities: activities, pomodoro: pomodoro, capture: capture, spectrum: spectrum)
         let hostingView = NSHostingView(rootView: root)
         hostingView.translatesAutoresizingMaskIntoConstraints = false
 

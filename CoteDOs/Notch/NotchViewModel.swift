@@ -11,7 +11,6 @@ final class NotchViewModel: ObservableObject {
         case files
         case capture
         case timer
-        case claude
 
         var title: String {
             switch self {
@@ -20,7 +19,6 @@ final class NotchViewModel: ObservableObject {
             case .files:   return String(localized: "tab.files", defaultValue: "Ablage")
             case .capture: return String(localized: "tab.capture", defaultValue: "Capture")
             case .timer:   return String(localized: "tab.timer", defaultValue: "Timer")
-            case .claude:  return String(localized: "tab.claude", defaultValue: "Claude")
             }
         }
 
@@ -35,15 +33,7 @@ final class NotchViewModel: ObservableObject {
             case .files:   return "tray.full"
             case .capture: return "square.and.pencil"
             case .timer:   return "timer"
-            case .claude:  return "steeringwheel"   // fallback; rendered as the 🦀 (see TabIcon)
             }
-        }
-
-        /// Tabs whose icon is an emoji glyph instead of an SF Symbol — SF
-        /// Symbols simply doesn't stock a crab, and the Claude tab gets
-        /// Claude Code's crab.
-        var emojiIcon: String? {
-            self == .claude ? "🦀" : nil
         }
     }
 

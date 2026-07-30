@@ -43,7 +43,6 @@ Beyond that:
 - Obsidian quick capture: ⌥⌘Space, type, and it's appended under a heading in today's daily note without Obsidian needing to be open. Point it at your vault in Settings first.
 - A pomodoro timer with named presets and auto-chaining, because I kept starting one in a phone app and then closing the phone app. Its readout docks onto the right side of the pill while music plays — the spectrum stays exactly centered under the notch and the pill grows asymmetrically to the right instead of shoving everything sideways.
 - Small live-activity banners for charging, AirPods connecting, a file landing in the shelf — a few seconds, then gone.
-- A Claude tab that shows my usage limits and shifts the desktop app's model and effort like a gearbox. This is the one I use maybe once a week.
 
 Every tab can be switched off in Settings if you only came for some of this.
 

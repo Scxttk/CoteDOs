@@ -162,13 +162,12 @@ final class UserSettings: ObservableObject {
         static let timerCountsUp = "timerCountsUp"
         static let timerAutoChain = "timerAutoChain"
         static let timerSoundEnabled = "timerSoundEnabled"
-        // Tab visibility (claudeTabEnabled predates the others — keep its key)
+        // Tab visibility
         static let musicTabEnabled = "musicTabEnabled"
         static let spectrumTabEnabled = "spectrumTabEnabled"
         static let filesTabEnabled = "filesTabEnabled"
         static let captureTabEnabled = "captureTabEnabled"
         static let timerTabEnabled = "timerTabEnabled"
-        static let claudeTabEnabled = "claudeTabEnabled"
     }
 
     private let defaults: UserDefaults
@@ -329,9 +328,6 @@ final class UserSettings: ObservableObject {
     @Published var timerTabEnabled: Bool {
         didSet { defaults.set(timerTabEnabled, forKey: Key.timerTabEnabled) }
     }
-    @Published var claudeTabEnabled: Bool {
-        didSet { defaults.set(claudeTabEnabled, forKey: Key.claudeTabEnabled) }
-    }
 
     func isTabEnabled(_ tab: NotchViewModel.Tab) -> Bool {
         switch tab {
@@ -340,7 +336,6 @@ final class UserSettings: ObservableObject {
         case .files: return filesTabEnabled
         case .capture: return captureTabEnabled
         case .timer: return timerTabEnabled
-        case .claude: return claudeTabEnabled
         }
     }
 
@@ -351,7 +346,6 @@ final class UserSettings: ObservableObject {
         case .files: filesTabEnabled = enabled
         case .capture: captureTabEnabled = enabled
         case .timer: timerTabEnabled = enabled
-        case .claude: claudeTabEnabled = enabled
         }
     }
 
@@ -376,7 +370,6 @@ final class UserSettings: ObservableObject {
             Key.filesTabEnabled: true,
             Key.captureTabEnabled: true,
             Key.timerTabEnabled: true,
-            Key.claudeTabEnabled: true,
             Key.coverPaletteSize: 4,
             Key.coverBrightnessLevels: 3,
             Key.coverBarSaturation: 1.0,
@@ -431,7 +424,17 @@ final class UserSettings: ObservableObject {
         self.filesTabEnabled = defaults.bool(forKey: Key.filesTabEnabled)
         self.captureTabEnabled = defaults.bool(forKey: Key.captureTabEnabled)
         self.timerTabEnabled = defaults.bool(forKey: Key.timerTabEnabled)
-        self.claudeTabEnabled = defaults.bool(forKey: Key.claudeTabEnabled)
+        // The Claude tab is gone, and an install that had it as its *only*
+        // enabled tab would come back with nothing to show: the tab row is
+        // built from the enabled set, so it renders empty, while the pill
+        // falls back to a tab the user switched off. The "you can't disable
+        // the last one" guard in Settings can't help — it only ever saw five
+        // tabs. Nothing in the app recovers from that, so hand the music tab
+        // back instead.
+        if !musicTabEnabled && !spectrumTabEnabled && !filesTabEnabled
+            && !captureTabEnabled && !timerTabEnabled {
+            self.musicTabEnabled = true
+        }
     }
 
     private static func encodeColor(_ color: Color) -> Data? {

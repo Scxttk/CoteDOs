@@ -29,10 +29,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let spectrum = SpectrumAnalyzer(bandCount: 32)
     lazy var capture = ObsidianCapture(activities: activities)
     lazy var pomodoro = PomodoroManager(activities: activities)
-    /// Claude tab: usage windows (fetched on demand, no background polling)
-    /// and the gear shifter driving the Claude desktop app.
-    let claudeUsage = ClaudeUsageModel()
-    let claudeDriver = ClaudeSessionDriver()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // As the unit tests' host app, do nothing: the real startup builds the
@@ -50,7 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // so it only needs pointing at the analyzer once.
         SourceAppAccent.shared.follow(spectrum)
 
-        let controller = NotchWindowController(viewModel: viewModel, nowPlaying: nowPlaying, shelf: shelf, activities: activities, pomodoro: pomodoro, capture: capture, spectrum: spectrum, claudeUsage: claudeUsage, claudeDriver: claudeDriver)
+        let controller = NotchWindowController(viewModel: viewModel, nowPlaying: nowPlaying, shelf: shelf, activities: activities, pomodoro: pomodoro, capture: capture, spectrum: spectrum)
         controller.show()
         windowController = controller
 

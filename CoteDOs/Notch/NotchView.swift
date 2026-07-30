@@ -9,8 +9,6 @@ struct NotchRootView: View {
     @ObservedObject var pomodoro: PomodoroManager
     @ObservedObject var capture: ObsidianCapture
     @ObservedObject var spectrum: SpectrumAnalyzer
-    @ObservedObject var claudeUsage: ClaudeUsageModel
-    @ObservedObject var claudeDriver: ClaudeSessionDriver
     /// Observed so `islandWidth` re-evaluates when the spectrum-only pill mode
     /// flips — the pill's width formula changes with it.
     @ObservedObject private var settings = UserSettings.shared
@@ -355,7 +353,7 @@ struct NotchRootView: View {
                 // tabs, then labels), so nothing ever re-appears. By the time
                 // it unmounts only the selected icon is left — pixel-identical
                 // to the pill icon replacing it (idle case).
-                ExpandedView(viewModel: viewModel, nowPlaying: nowPlaying, shelf: shelf, pomodoro: pomodoro, capture: capture, spectrum: spectrum, claudeUsage: claudeUsage, claudeDriver: claudeDriver, spectrumWaveDrawnByOverlay: morphingWaveActive, spectrumWaveBarCount: morphingWaveActive ? pageWaveBarCount : nil)
+                ExpandedView(viewModel: viewModel, nowPlaying: nowPlaying, shelf: shelf, pomodoro: pomodoro, capture: capture, spectrum: spectrum, spectrumWaveDrawnByOverlay: morphingWaveActive, spectrumWaveBarCount: morphingWaveActive ? pageWaveBarCount : nil)
                     .transition(handover)
             }
             if state == .collapsed || pillHero {
@@ -501,8 +499,6 @@ private struct ExpandedView: View {
     @ObservedObject var pomodoro: PomodoroManager
     @ObservedObject var capture: ObsidianCapture
     @ObservedObject var spectrum: SpectrumAnalyzer
-    @ObservedObject var claudeUsage: ClaudeUsageModel
-    @ObservedObject var claudeDriver: ClaudeSessionDriver
     /// True while `NotchRootView` is drawing the spectrum itself, above this
     /// view, so it can travel in from the pill as one object — the page then
     /// leaves a hole exactly where the wave will land, and takes it back over
@@ -618,7 +614,6 @@ private struct ExpandedView: View {
                         page(.files, in: geo.size) { ShelfView(shelf: shelf) }
                         page(.capture, in: geo.size) { CaptureView(capture: capture, viewModel: viewModel) }
                         page(.timer, in: geo.size) { PomodoroView(pomodoro: pomodoro) }
-                        page(.claude, in: geo.size) { ClaudeTabView(usage: claudeUsage, driver: claudeDriver, isFront: viewModel.selectedTab == .claude) }
                     }
                     .offset(x: -CGFloat(pageIndex) * geo.size.width)
                 }
@@ -675,9 +670,7 @@ enum DebugGeometry {
     }
 }
 
-/// A tab's glyph: its SF Symbol, or its emoji where none exists (the Claude
-/// tab's crab). Emoji ignore `foregroundStyle`, so the dimming the symbols get
-/// from the surrounding style is applied here as opacity.
+/// A tab's glyph.
 private struct TabIcon: View {
     let tab: NotchViewModel.Tab
     var dimmed = false
@@ -685,19 +678,12 @@ private struct TabIcon: View {
     var debugContext: String?
 
     var body: some View {
-        Group {
-            if let emoji = tab.emojiIcon {
-                Text(emoji)
-                    .opacity(dimmed ? Double(NotchLayout.tabInactiveOpacity) : 1)
-            } else {
-                Image(systemName: tab.icon)
+        Image(systemName: tab.icon)
+            .onGeometryChange(for: CGRect.self) { proxy in
+                proxy.frame(in: .global)
+            } action: { frame in
+                if let debugContext { DebugGeometry.log(debugContext, frame) }
             }
-        }
-        .onGeometryChange(for: CGRect.self) { proxy in
-            proxy.frame(in: .global)
-        } action: { frame in
-            if let debugContext { DebugGeometry.log(debugContext, frame) }
-        }
     }
 }
 
