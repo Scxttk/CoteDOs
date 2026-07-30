@@ -37,6 +37,20 @@ final class FileShelfModel: ObservableObject {
         persist()
     }
 
+    #if DEBUG
+    /// Stage items without persisting them.
+    ///
+    /// `add(_:)` writes shelf.json in Application Support, which is shared with
+    /// whatever copy of the app is running — a render harness must not be able
+    /// to touch a real shelf. Thumbnails still go through the real QuickLook
+    /// path, because a shot of the shelf with placeholder icons is a shot of
+    /// the wrong thing.
+    func setItemsForTesting(_ urls: [URL]) {
+        items = urls.map(ShelfItem.init(url:))
+        items.forEach { loadThumbnail(for: $0) }
+    }
+    #endif
+
     func remove(_ item: ShelfItem) {
         items.removeAll { $0.id == item.id }
         persist()

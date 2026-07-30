@@ -610,7 +610,7 @@
     "tab.files" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Ablage" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Files" } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Shelf" } }
       }
     },
     "tab.music" : {

@@ -238,7 +238,10 @@
 				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = 3DZ9T8SGX5;
 				CODE_SIGN_ENTITLEMENTS = CoteDOs.entitlements;
-				ENABLE_HARDENED_RUNTIME = YES;
+				// Release-only: with the runtime on, library validation refuses to dlopen the
+				// xctest bundle into the host app ("different Team IDs") and the whole suite
+				// fails to load. Notarization only ever sees Release.
+				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

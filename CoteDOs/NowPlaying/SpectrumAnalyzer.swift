@@ -677,6 +677,23 @@ final class SpectrumAnalyzer: ObservableObject {
     /// change. Without the gate, silence still cost a main-thread update per
     /// frame for an unchanged all-zero wave; with it, a quiet system reduces
     /// the publisher to a float comparison.
+    #if DEBUG
+    /// Publish `levels` as though the tap had delivered them: bands, signal and
+    /// live flag all set, none of which `ingestForTesting` touches (it returns
+    /// the smoothed levels and leaves the published state alone, which is what
+    /// its callers want).
+    ///
+    /// Without this the marketing shots draw the *procedural fallback* — the
+    /// fixed pattern the wave runs when there is no tap. It looks convincing,
+    /// which is the problem: it would put a wave that ignores the music on the
+    /// README under the claim that these are real frequencies.
+    func publishForTesting(_ levels: [Float]) {
+        bands.values = spatiallySmoothed(levels).map { CGFloat($0) }
+        hasSignal = true
+        isLive = true
+    }
+    #endif
+
     private func publishIfDue() {
         let now = CACurrentMediaTime()
         guard now - lastPublish >= 1.0 / Self.publishesPerSecond else { return }

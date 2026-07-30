@@ -196,6 +196,26 @@ final class NowPlayingManager: ObservableObject {
         refreshArtworkColor(for: s.track?.artworkURL)
     }
 
+    #if DEBUG
+    /// Publish a fabricated playback state, bypassing the AppleScript sources.
+    ///
+    /// The only other way to get a track into this object is for a real player
+    /// to be running and scriptable, which an offscreen render has no way to
+    /// arrange — so the marketing shots would otherwise have to be taken of
+    /// "Nothing playing". Goes through the same assignments and the same
+    /// artwork pipeline as `publishActive`, so what renders is what the real
+    /// path would have produced.
+    func applyForTesting(_ state: NowPlayingState) {
+        isRunning = state.isRunning
+        isPlaying = state.isPlaying
+        track = state.track
+        position = state.position
+        isShuffling = state.isShuffling
+        permissionDenied = state.permissionDenied
+        refreshArtworkColor(for: state.track?.artworkURL)
+    }
+    #endif
+
     /// Recompute the wave tint only when the cover changes; clear it when there's
     /// no artwork so the visualizer reverts to its default blue.
     private func refreshArtworkColor(for url: URL?) {
