@@ -45,6 +45,15 @@ the README never mentioned the difference.
   the cover of a paused track in Spotify.
 - **English.** The whole interface, not just the parts that happened to be
   translated. Both permission prompts too.
+- **Reduce Motion is answered.** Turn it on in Accessibility → Display and the
+  island stops springing — every transition becomes a short crossfade. The
+  spectrum keeps moving, because the spectrum is the content, not decoration.
+- **VoiceOver has something to say.** The transport buttons were four unnamed
+  buttons; they have names now. The collapsed pill reads as one sentence — track,
+  artist, the timer if one is running, how many files are on the shelf — rather
+  than as a row of unlabelled images.
+- A new icon, drawn in code, with all seven sizes generated from one source
+  instead of six of them exported by hand.
 
 ### Changed
 - **One wave at three sizes.** The pill, the spectrum page and the fullscreen

@@ -129,6 +129,12 @@ That last one is filed under **Audio Recording**, not Microphone. Resetting Micr
 tccutil reset AudioCapture com.scott.notchmate
 ```
 
+## Accessibility
+
+Turn on **Reduce Motion** (Accessibility → Display) and the island stops springing — every transition becomes a short crossfade instead. The spectrum keeps moving, because the spectrum is the content rather than decoration; muting it to reduce motion would be like muting a music player.
+
+VoiceOver reads the collapsed pill as one sentence — track, artist, the timer if one is running, how many files are on the shelf — rather than as a row of unlabelled images, and the transport buttons have names.
+
 ## Privacy
 
 The app makes no network requests. No analytics, no update check, no telemetry — after the Claude tab came out in 1.5.0 there isn't a single `URLSession` call site left in the source. Grep it.
