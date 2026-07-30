@@ -30,8 +30,14 @@ xcodebuild test -project CoteDOs.xcodeproj -scheme CoteDOs \
   -skip-testing:CoteDOsTests/MarketingShots \
   CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=NO
 
+# The Developer ID identity is specified here rather than in the project. Baked
+# into the Release config it collides with automatic signing ("conflicting
+# provisioning settings") and every ordinary Release build fails — including the
+# one you make to try a change locally. Shipping is this script's job, so the
+# shipping identity is this script's argument.
 xcodebuild archive -project CoteDOs.xcodeproj -scheme CoteDOs \
-  -configuration Release -archivePath "$ARCHIVE"
+  -configuration Release -archivePath "$ARCHIVE" \
+  CODE_SIGN_IDENTITY="Developer ID Application" CODE_SIGN_STYLE=Manual
 
 # method=developer-id in ExportOptions.plist: the export re-signs, and that is
 # the step that settles the entitlements of the artifact people download.
@@ -43,7 +49,7 @@ xcodebuild -exportArchive -archivePath "$ARCHIVE" \
 # check the artifact rather than trusting the build settings.
 if codesign -d --entitlements - --xml "$APP" 2>/dev/null | plutil -p - | grep -q "get-task-allow"; then
   echo "get-task-allow is in the exported app — not submitting." >&2
-  echo "Release CODE_SIGN_IDENTITY must be Developer ID Application." >&2
+  echo "The archive step must sign with Developer ID Application." >&2
   exit 1
 fi
 
