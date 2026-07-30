@@ -41,6 +41,7 @@ struct NotchTabBar: View {
                 tab(value)
             }
         }
+        .padding(.top, showsAllTabs ? NotchLayout.tabBarTopInset : 0)
     }
 
     @ViewBuilder

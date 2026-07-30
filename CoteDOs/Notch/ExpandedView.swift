@@ -52,7 +52,7 @@ struct ExpandedView: View {
                 showsAllTabs: viewModel.islandState == .expanded || viewModel.islandState == .band
             )
             .frame(maxWidth: .infinity)
-            .frame(height: NotchLayout.currentCollapsedHeight)
+            .frame(height: NotchLayout.currentCollapsedHeight + NotchLayout.tabBarTopInset)
             // Last beat of the opening: the island widens, the wave travels
             // into it, and the chrome fades up around them (see
             // `NotchViewModel.chromeRevealed`). Opacity only — the row keeps

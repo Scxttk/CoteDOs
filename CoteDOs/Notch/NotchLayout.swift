@@ -444,6 +444,19 @@ enum NotchLayout {
     /// solo tab is shifted by to re-centre the icon.
     static let tabIconLabelSpacing: CGFloat = 4
     /// Spacing between tab groups in the expanded tab bar.
+    /// Breathing room above the tab row while the island is open.
+    ///
+    /// The row otherwise sits in the collapsed pill's own 24 pt band, flush to
+    /// the top, because that is what puts the tab icons on the same y as the
+    /// pill's glyph and makes the collapse handover purely horizontal. At pill
+    /// size that band is the whole island and the tightness reads as correct; at
+    /// 212 pt it reads as the icons being pressed against the rim.
+    ///
+    /// Applied only while every tab is showing, so the row drops back into the
+    /// pill band exactly as the capsule narrows onto the selected icon — the
+    /// handover still lands, it just arrives on the last beat instead of never
+    /// having moved.
+    static let tabBarTopInset: CGFloat = 9
     static let tabBarSpacing: CGFloat = 6
     /// Padding inside each tab button (around icon + label).
     static let tabItemPaddingVertical: CGFloat = 3
@@ -690,5 +703,5 @@ enum NotchLayout {
     /// How wide the capture field is allowed to get. 260 left it floating in the
     /// middle of a 428 pt page with dead space either side, which read as an
     /// unfinished layout rather than as a deliberately small target.
-    static let captureFieldWidth: CGFloat = 340
+    static let captureFieldWidth: CGFloat = 372
 }

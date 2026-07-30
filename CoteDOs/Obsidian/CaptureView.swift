@@ -60,12 +60,11 @@ struct CaptureView: View {
     }
 
     private var captureField: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 9) {
             // One line, not two. This used to be the vault name above the field
             // and "→ today's daily note" below it, both at 9–10 pt and 40 %
             // opacity — two separate whispers saying one thing between them,
-            // with the field stranded in the middle. Said once, at a size you
-            // can actually read, it becomes a caption instead of clutter.
+            // with the field stranded in the middle.
             HStack(spacing: 5) {
                 Image(systemName: "shippingbox")
                     .font(.system(size: 10))
@@ -79,29 +78,35 @@ struct CaptureView: View {
 
             pill
                 .frame(maxWidth: NotchLayout.captureFieldWidth)
-
-            HStack(spacing: 16) {
-                OpenInObsidianButton(action: openVaultInObsidian)
-                QuickLaunchButton()
-            }
         }
         .frame(maxWidth: .infinity)
     }
 
-    /// The capsule around the input. While `fieldLive` is false a SwiftUI-only
-    /// placeholder stands in for the AppKit-backed `TextField` (see header doc).
+    /// The card the note is written in.
+    ///
+    /// A card, not the capsule it used to be, and it grows to four lines. The
+    /// capsule was a one-line 340 pt field with a magnifying-glass silhouette —
+    /// it looked like a search box and it behaved like one, so a thought longer
+    /// than a few words scrolled sideways out of its own field while you typed
+    /// it. Captures are sentences. This is the shape a sentence goes in.
+    ///
+    /// Return still submits (the capture is one line in the daily note either
+    /// way — `CaptureEscaping.sanitizeLine` collapses the breaks), and ⇧Return
+    /// makes a new line, which is the pairing every message field on the machine
+    /// already uses.
+    ///
+    /// While `fieldLive` is false a SwiftUI-only placeholder stands in for the
+    /// AppKit-backed `TextField` (see the header doc).
     private var pill: some View {
-        HStack(spacing: 9) {
-            Image(systemName: "square.and.pencil")
-                .font(.system(size: 14))
-                .foregroundStyle(.white.opacity(0.55))
-
+        VStack(alignment: .leading, spacing: 8) {
             if fieldLive {
                 TextField(
                     String(localized: "capture.placeholder", defaultValue: "Schnelle Notiz …"),
-                    text: $text
+                    text: $text,
+                    axis: .vertical
                 )
                 .textFieldStyle(.plain)
+                .lineLimit(1...4)
                 .font(.system(size: 14))
                 .foregroundStyle(.white)
                 .focused($fieldFocused)
@@ -110,20 +115,33 @@ struct CaptureView: View {
                 Text(text.isEmpty ? String(localized: "capture.placeholder", defaultValue: "Schnelle Notiz …") : text)
                     .font(.system(size: 14))
                     .foregroundStyle(.white.opacity(text.isEmpty ? 0.4 : 1))
-                    .lineLimit(1)
+                    .lineLimit(4)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            CaptureIconButton(systemName: "safari", help: String(localized: "capture.browser", defaultValue: "Aktuelle Browser-Seite erfassen")) {
-                capture.captureBrowserPage()
+            // The actions sit inside the card, on its floor, rather than in a
+            // separate row underneath it: they act on what is written above them.
+            HStack(spacing: 10) {
+                CaptureIconButton(systemName: "safari", help: String(localized: "capture.browser", defaultValue: "Aktuelle Browser-Seite erfassen")) {
+                    capture.captureBrowserPage()
+                }
+                OpenInObsidianButton(action: openVaultInObsidian)
+                QuickLaunchButton()
+
+                Spacer(minLength: 0)
+
+                CaptureIconButton(systemName: "arrow.up.circle.fill", help: String(localized: "capture.submit", defaultValue: "An Daily Note anhängen"), prominent: true, action: submit)
+                    .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            CaptureIconButton(systemName: "arrow.up.circle.fill", help: String(localized: "capture.submit", defaultValue: "An Daily Note anhängen"), prominent: true, action: submit)
-                .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
         }
-        .padding(.horizontal, 13)
-        .padding(.vertical, 11)
-        .background(Capsule().fill(Color.white.opacity(0.10)))
-        .overlay(Capsule().strokeBorder(Color.white.opacity(fieldFocused ? 0.35 : 0.12), lineWidth: 1))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.08)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(fieldFocused ? 0.32 : 0.12), lineWidth: 1)
+        )
     }
 
     private var notConfigured: some View {

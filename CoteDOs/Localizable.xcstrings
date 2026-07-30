@@ -565,6 +565,12 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Sound when a timer ends" } }
       }
     },
+    "shelf.clear" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ablage leeren" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear the shelf" } }
+      }
+    },
     "shelf.dropHint" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Dateien hierher ziehen" } },
