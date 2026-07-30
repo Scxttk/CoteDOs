@@ -3,54 +3,6 @@
 All notable changes to Côte d'OS (formerly Ledge, formerly NotchMate — the
 bundle identifier still is NotchMate, see the README for why).
 
-## [Unreleased]
-
-### Changed
-- **The spectrum's colours now match the iPhone's.** Measured per bar off three
-  now-playing waveforms on a real iPhone — a vivid pink sleeve, a
-  red/orange/green one and a near-white pastel — Apple's bars sit at saturation
-  0.08–0.38 and, whatever the cover looks like, all peak at the same brightness.
-  Côte d'OS was running 0.63–0.81 and letting each colour keep its own light
-  level, so a bright orange bar sat 0.30 above the magenta one beside it and the
-  seam read as a break in the wave. The cover's colours are now toned *down*
-  rather than boosted, and every bar draws at one light level, with the
-  bar-to-bar shading doing the rest.
-  - The cause was narrow: the Cover style was the only one that never passed
-    through the ceiling the rest of the app used, and nothing checked. It does
-    now — a test holds every bar of four very different synthetic sleeves inside
-    the measured band.
-
-### Removed
-- **The spectrum's style and colour settings.** Solid, Shades, Alternating and
-  Gradient are gone, along with the colour source picker, the two accent colour
-  wells and the four Cover-style sliders. The wave takes its colours from the
-  album cover, the way it does on the phone, and there is nothing left to set
-  wrong. Existing preferences are simply no longer read.
-
-### Fixed
-- **Opening the notch on any tab but Spectrum flung the wave sideways.** The
-  pill's spectrum is one persistent run that travels to the spectrum page and
-  back, and it was kept mounted even while the island rested open somewhere
-  else — so it had to be shoved three page widths out of sight, at the
-  tab-change spring, every time you hovered. It is given up there instead and
-  dissolves where it stands. An actual tab change still slides it out with the
-  page it stands in for.
-- **The tab row was 9 pt too tall for the stage that draws it at pill height.**
-  `.band` keeps every tab but is only 24 pt, so the open island's breathing room
-  pushed the icons down into the island's own clip — the bottom of each one cut
-  off for that whole stage, then snapped back up on the next. The inset now sits
-  outside the band and only while the island is open, which also lands the
-  glyphs on exactly the y the pill's glyph occupies. That was the premise the
-  handover's hard cut rested on, and it had been lost.
-- **The selected tab's grey highlight blinked out rather than leaving.** It
-  survived the entire collapse and vanished with the row on the final frame.
-- **The pill drew its glyph too large for itself.** `TabIcon` sets its own size,
-  which silently overrode the smaller one the pill asked for — so raising the
-  tab icons to 17 pt raised the pill's with them. `radio.fill` measures 24 × 23
-  at that size, in a 24 pt band whose width estimate budgeted 14 pt for it, and
-  the capsule's rounded ends shaved its corners. 15 pt now, measured, with three
-  tests holding every glyph inside the band it has to fit.
-
 ## [1.5.0] – 2026-07-30
 
 The release where the wave gets the whole screen, and the app gets signed
@@ -104,6 +56,19 @@ the README never mentioned the difference.
   instead of six of them exported by hand.
 
 ### Changed
+- **The spectrum's colours match the iPhone's.** Measured per bar off three
+  now-playing waveforms on a real iPhone — a vivid pink sleeve, a
+  red/orange/green one and a near-white pastel — Apple's bars sit at saturation
+  0.08–0.38 and, whatever the cover looks like, all peak at the same brightness.
+  Côte d'OS was running 0.63–0.81 and letting each colour keep its own light
+  level, so a bright orange bar sat 0.30 above the magenta one beside it and the
+  seam read as a break in the wave. The cover's colours are toned *down* now
+  rather than boosted, and every bar draws at one light level, with the
+  bar-to-bar shading doing the rest.
+  - The cause was narrow: the Cover style was the only one that never passed
+    through the ceiling the rest of the app used, and nothing checked. It does
+    now — a test holds every bar of four very different synthetic sleeves inside
+    the measured band.
 - **One wave at three sizes.** The pill, the spectrum page and the fullscreen
   takeover are one continuous run that travels and grows, not three renderers
   that hand off to each other. Widening the pill's wave now gives you fewer,
@@ -118,11 +83,14 @@ the README never mentioned the difference.
   NotchMate" since the rename, because the string catalog quietly overrode the
   code.
 - Five tabs instead of six.
-- **The tab bar is icons only, and the icons are twice the size.** They used to
-  inherit the label's 13 pt and then the whole row was scaled to 0.72 to fit five
-  German titles into the island — about 9 pt of icon. Without the titles the row
-  fits at full size, and the selected tab sits in a filled capsule instead. The
-  names are still there on hover, and VoiceOver reads them.
+- **The tab bar is icons only, and the icons are two thirds larger.** They used
+  to inherit the label's 13 pt and then the whole row was scaled to 0.72 to fit
+  five German titles into the island — about 9 pt of icon. Without the titles the
+  row fits unscaled and the glyphs draw at 15 pt, which is as large as the 24 pt
+  pill band holds them: the same glyph is what the collapsed pill shows, and at
+  17 pt the capsule's rounded ends were shaving its corners. The selected tab
+  sits in a filled capsule where its title used to be. The names are still there
+  on hover, and VoiceOver reads them.
 - **Capture is somewhere to write.** It was a one-line field that looked like a
   search box and behaved like one — a thought longer than a few words scrolled
   sideways out of its own field as you typed it. It is a card that grows to four
@@ -132,6 +100,11 @@ the README never mentioned the difference.
 - The tab icons are no longer pressed against the top rim of the island.
 
 ### Removed
+- **The spectrum's style and colour settings.** Solid, Shades, Alternating and
+  Gradient are gone, along with the colour source picker, the two accent colour
+  wells and the four Cover-style sliders. The wave takes its colours from the
+  album cover, the way it does on the phone, and there is nothing left to set
+  wrong. Existing preferences are simply no longer read.
 - **The Claude tab.** It read Claude Code's OAuth credential out of the login
   keychain, called an undocumented usage endpoint with it, and wrote refreshed
   tokens back. Fine on my own Mac; not something to hand to strangers in a signed
@@ -139,8 +112,8 @@ the README never mentioned the difference.
 
 ### Fixed
 - Around eighty interface strings fell back to German in every locale, English
-  included — the entire Obsidian pane, every spectrum and cover setting, the
-  whole capture surface, and two of the tab titles.
+  included — the entire Obsidian pane, the whole capture surface, and two of the
+  tab titles.
 - Five Settings labels had been showing older text than the code intended, for
   the same reason as the Quit item. The volume/brightness toggle in particular
   still called itself experimental.
