@@ -3,8 +3,11 @@ import SwiftUI
 import AppKit
 @testable import CoteDOs
 
-/// Renders the island offscreen and composites it over a real macOS wallpaper,
-/// producing the images the README ships. Output goes to `/tmp/cotedos-shots/`.
+/// Renders the island offscreen and composites it onto a backdrop, producing the
+/// images the README ships. Output goes to `/tmp/cotedos-shots/`.
+///
+/// Two backdrops, see `Backdrop`: a light plate for the feature tiles, and a real
+/// macOS wallpaper for the two shots whose whole point is *where* the pill lives.
 ///
 /// This exists because the obvious way — point `screencapture` at a running
 /// copy — needs two grants this machine cannot hand an automated session:
@@ -16,8 +19,8 @@ import AppKit
 ///
 /// What is real here: the views, the layout constants, the artwork colour
 /// election, the QuickLook thumbnails, the FFT (the wave is a genuine frame of
-/// the analyzer's output for a known input signal), and the wallpaper. What is
-/// fabricated: the track, its cover, and the files on the shelf.
+/// the analyzer's output for a known input signal), and the wallpaper where one is
+/// used. What is fabricated: the track, its cover, and the files on the shelf.
 ///
 /// Not a regression test — the assertions only pin that each shot rendered at
 /// all. Judging them is done by looking.
@@ -42,19 +45,21 @@ final class MarketingShots: XCTestCase {
 
     // MARK: - The shots
 
-    /// Opt-in. It takes ~23 s, mounts real windows, and rewrites
-    /// `UserSettings.shared` for the duration — none of which belongs in the run
-    /// every push does. Invoke it deliberately:
+    /// Renders the images the README ships. Run it deliberately:
     ///
-    ///     COTEDOS_SHOTS=1 xcodebuild test -project CoteDOs.xcodeproj \
-    ///       -scheme CoteDOs -destination 'platform=macOS' -testLanguage en \
+    ///     xcodebuild test -project CoteDOs.xcodeproj -scheme CoteDOs \
+    ///       -destination 'platform=macOS' -testLanguage en \
     ///       -only-testing:CoteDOsTests/MarketingShots
     ///
-    /// `-testLanguage en` matters: without it the shots come out in whatever
-    /// language this Mac is set to.
+    /// `-testLanguage en` is not optional — without it the shots come out in
+    /// whatever language this Mac is set to.
+    ///
+    /// CI skips this with `-skip-testing:` rather than the test gating itself on
+    /// an environment variable: the tests run in their own process, so neither a
+    /// plain `FOO=1 xcodebuild` nor `TEST_RUNNER_FOO=1` reaches them here, and a
+    /// guard that never fires makes the whole thing silently skip while
+    /// reporting success. Which it did, twice.
     func testRenderReadmeShots() throws {
-        try XCTSkipUnless(ProcessInfo.processInfo.environment["COTEDOS_SHOTS"] == "1",
-                          "set COTEDOS_SHOTS=1 to render the README images")
         try XCTSkipUnless(FileManager.default.fileExists(atPath: wallpaper.path),
                           "no system wallpaper at \(wallpaper.path)")
 
@@ -126,7 +131,22 @@ final class MarketingShots: XCTestCase {
                           spectrum: spectrum)
         }
 
-        // --- expanded, one per tab -----------------------------------------
+        let expanded = CGSize(width: viewModel.expandedWidth, height: viewModel.expandedHeight)
+
+        // --- the shot at the top of the README ------------------------------
+        // On a plate, not a desktop. The wallpaper's top-centre is where the pale
+        // part of it lives, and the island lost contrast against exactly the
+        // region a real screenshot would have caught. The collapsed pill below
+        // carries the "this lives at the top of your screen" job instead, which
+        // is the shot that actually needs a desktop behind it.
+        viewModel.selectedTab = .music
+        viewModel.islandState = .expanded
+        viewModel.pagesSettled = true
+        settle(NotchLayout.chromeRevealDelay + 0.4)
+        feedAudio(spectrum)
+        try shoot(root(), islandSize: expanded, named: "hero")
+
+        // --- one tile per tab, on the plate ---------------------------------
         for tab in NotchViewModel.Tab.allCases {
             viewModel.selectedTab = tab
             viewModel.islandState = .expanded
@@ -134,9 +154,7 @@ final class MarketingShots: XCTestCase {
             settle(NotchLayout.chromeRevealDelay + 0.4)
             feedAudio(spectrum)
 
-            try shoot(root(),
-                      islandSize: CGSize(width: viewModel.expandedWidth, height: viewModel.expandedHeight),
-                      named: "notch-\(tab.rawValue)")
+            try shoot(root(), islandSize: expanded, named: "tab-\(tab.rawValue)")
         }
 
         // --- collapsed pill -------------------------------------------------
@@ -150,7 +168,7 @@ final class MarketingShots: XCTestCase {
         try shoot(root(),
                   islandSize: CGSize(width: viewModel.collapsedWidth(isPlaying: true, hasItems: false, timerText: nil),
                                      height: viewModel.collapsedHeight),
-                  named: "notch-collapsed")
+                  on: .desktop, named: "notch-collapsed")
 
         // --- collapsed, spectrum-only, at its widest ------------------------
         settings.pillSpectrumOnly = true
@@ -160,7 +178,7 @@ final class MarketingShots: XCTestCase {
         try shoot(root(),
                   islandSize: CGSize(width: viewModel.collapsedWidth(isPlaying: true, hasItems: false, timerText: nil),
                                      height: viewModel.collapsedHeight),
-                  named: "pill-spectrum")
+                  on: .desktop, named: "pill-spectrum")
         settings.pillSpectrumOnly = false
 
         // --- the shelf badge: a pill with files staged -----------------------
@@ -170,7 +188,7 @@ final class MarketingShots: XCTestCase {
         try shoot(root(),
                   islandSize: CGSize(width: viewModel.collapsedWidth(isPlaying: true, hasItems: true, timerText: nil),
                                      height: viewModel.collapsedHeight),
-                  named: "pill-shelf")
+                  on: .desktop, named: "pill-shelf")
 
         // --- the five spectrum styles, side by side -------------------------
         try shootStyleStrip(spectrum: spectrum, nowPlaying: nowPlaying, settings: settings)
@@ -180,18 +198,36 @@ final class MarketingShots: XCTestCase {
 
         let written = try FileManager.default.contentsOfDirectory(atPath: Self.outputDirectory.path)
             .filter { $0.hasSuffix(".png") }
-        XCTAssertGreaterThanOrEqual(written.count, 9,
-            "expected a shot per tab plus the pills, strip and hero; got \(written.sorted())")
+        XCTAssertGreaterThanOrEqual(written.count, 10,
+            "expected the hero, a tile per tab, the pills, the strip and the takeover; got \(written.sorted())")
     }
 
     // MARK: - Rendering
 
-    /// Renders `view` into a wallpaper-backed canvas sized around the island and
-    /// writes it as a PNG.
-    private func shoot<V: View>(_ view: V, islandSize: CGSize, named name: String) throws {
-        let canvas = CGSize(width: (islandSize.width + 60).rounded(),
-                            height: (headroom + islandSize.height + 30).rounded())
-        let top = headroom - NotchLayout.islandTopGap
+    /// What sits behind the island.
+    ///
+    /// Two answers, because they do different jobs. `.desktop` is a real macOS
+    /// wallpaper, and it is the only thing that says *this lives at the top of
+    /// your screen* — worth it once, for the shot at the top of the README.
+    /// `.plate` is Apple's own marketing grey, and it is what the per-feature
+    /// tiles want: a wallpaper behind each of five tiles gives five different
+    /// backgrounds competing with the interface they are supposed to be showing,
+    /// and the violet in that wallpaper fights the violet in the wave.
+    private enum Backdrop {
+        case desktop
+        case plate
+    }
+
+    /// Renders `view` over `backdrop`, on a canvas sized around the island.
+    private func shoot<V: View>(_ view: V, islandSize: CGSize, on backdrop: Backdrop = .plate,
+                                named name: String) throws {
+        // Tiles get more air than the desktop shots: on a plate the island is an
+        // object being presented, and crowding the frame reads as a crop.
+        let pad: CGFloat = backdrop == .plate ? 54 : 30
+        let head = backdrop == .plate ? 44 : headroom
+        let canvas = CGSize(width: (islandSize.width + pad * 2).rounded(),
+                            height: (head + islandSize.height + pad).rounded())
+        let top = head - NotchLayout.islandTopGap
 
         let framed = ZStack(alignment: .top) {
             Color.clear.frame(width: canvas.width, height: canvas.height)
@@ -202,8 +238,45 @@ final class MarketingShots: XCTestCase {
         .frame(width: canvas.width, height: canvas.height)
 
         let island = try render(framed, rawSize: canvas)
-        let backdrop = try wallpaperCrop(canvas)
-        try write(try composite(island, over: backdrop), named: name)
+        let behind = try backdrop == .desktop ? wallpaperCrop(canvas) : marketingPlate(canvas)
+        try write(try composite(island, over: behind), named: name)
+    }
+
+    /// #F5F5F7 to white, with a soft warm-grey pool under where the island sits.
+    /// That grey is the one Apple's own product pages use, and the reason it works
+    /// here is contrast: the island is black, so it needs a light field to read as
+    /// an object rather than as a hole.
+    private func marketingPlate(_ size: CGSize) throws -> CGImage {
+        let context = try newContext(size)
+        let w = size.width * scale, h = size.height * scale
+        context.drawLinearGradient(
+            Self.gradient([(0, 0xFFFFFF, 1), (0.55, 0xF7F7F9, 1), (1, 0xEDEDF1, 1)]),
+            start: CGPoint(x: 0, y: h), end: CGPoint(x: 0, y: 0), options: [])
+        // A whisper of a vignette. Anything stronger reaches the canvas edge
+        // before it has faded and lands as a visible grey band along the bottom,
+        // which reads as a badly exported JPEG rather than as depth.
+        context.saveGState()
+        context.translateBy(x: w / 2, y: h * 0.5)
+        context.scaleBy(x: 1, y: 0.62)
+        context.drawRadialGradient(
+            Self.gradient([(0, 0xB9B9C6, 0), (0.62, 0xB9B9C6, 0), (1, 0xB9B9C6, 0.16)]),
+            startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: w * 1.05, options: [])
+        context.restoreGState()
+        return try XCTUnwrap(context.makeImage(), "plate render failed")
+    }
+
+    private static func gradient(_ stops: [(CGFloat, UInt32, CGFloat)]) -> CGGradient {
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+        let colors = stops.map { _, hex, alpha in
+            CGColor(colorSpace: space, components: [
+                CGFloat((hex >> 16) & 0xFF) / 255,
+                CGFloat((hex >> 8) & 0xFF) / 255,
+                CGFloat(hex & 0xFF) / 255,
+                alpha,
+            ])!
+        }
+        return CGGradient(colorsSpace: space, colors: colors as CFArray,
+                          locations: stops.map(\.0))!
     }
 
     /// One image holding all five colour styles of the same frame, for the

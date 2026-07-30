@@ -17,7 +17,11 @@ jobs:
             -configuration Debug build \
             CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=NO
       - name: Test
+        # MarketingShots is skipped here, not gated in code: it renders the
+        # README images, which takes ~25 s, mounts real windows and needs a
+        # system wallpaper. Nothing about it tests the app.
         run: |
           xcodebuild test -project CoteDOs.xcodeproj -scheme CoteDOs \
             -destination 'platform=macOS' \
+            -skip-testing:CoteDOsTests/MarketingShots \
             CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=NO
