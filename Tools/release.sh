@@ -9,6 +9,10 @@
 #   * notarytool credentials under the profile name below
 #       xcrun notarytool store-credentials cotedos-notary \
 #         --apple-id scott_koehler@web.de --team-id 3DZ9T8SGX5
+#
+# Don't pipe this into anything. Every check here exits non-zero on failure and
+# a pipeline reports the *last* command's status, so `release.sh | tail` turns a
+# refusal to ship into a clean success.
 set -e
 
 cd "$(dirname "$0")/.."
@@ -18,6 +22,19 @@ OUT="build/release"
 ARCHIVE="$OUT/CoteDOs.xcarchive"
 APP="$OUT/CoteDOs.app"
 ZIP="$OUT/CoteDOs.zip"
+LOCK="build/.release-lock"
+
+# One run at a time. Two of them share $OUT, and the damage is not a clobbered
+# file — it is that the first run reads the second run's notarization log as its
+# own verdict, and stops one step short of shipping a build Apple had already
+# accepted. mkdir is the atomic test-and-set every shell has.
+mkdir -p build
+if ! mkdir "$LOCK" 2>/dev/null; then
+  echo "Another release run holds $LOCK." >&2
+  echo "Wait for it to finish, or remove that directory if it died." >&2
+  exit 1
+fi
+trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
@@ -59,14 +76,20 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 # them and notarization rejects the result.
 ditto -c -k --keepParent "$APP" "$ZIP"
 
-# --wait exits 0 on a rejection too, so read the status out of the log. The
-# submission id in there is what `xcrun notarytool log <id>` wants when Apple
-# says Invalid and won't say why in the summary.
-xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait | tee "$OUT/notary.log"
-if ! grep -q "status: Accepted" "$OUT/notary.log"; then
-  echo "Notarization did not come back Accepted — see $OUT/notary.log." >&2
-  exit 1
-fi
+# --wait exits 0 on a rejection too, so the printed status is the only verdict
+# there is. Read it from what *this* run received rather than from the log file
+# afterwards: the file is shared, and a concurrent run's "In Progress" once got
+# read back here as this run's answer. The log is still written, because the
+# submission id in it is what `xcrun notarytool log <id>` wants when Apple says
+# Invalid and won't say why in the summary.
+NOTARY=$(xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait 2>&1 | tee "$OUT/notary.log")
+case "$NOTARY" in
+  *"status: Accepted"*) ;;
+  *)
+    echo "Notarization did not come back Accepted — see $OUT/notary.log." >&2
+    exit 1
+    ;;
+esac
 
 # The ticket is stapled into the app, so the zip has to be rebuilt around it.
 # Without this every first launch phones Apple, and fails offline.
