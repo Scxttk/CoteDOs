@@ -234,17 +234,23 @@ final class NowPlayingManager: ObservableObject {
 
     /// Open the current song in its app: the deep link when we have one
     /// (Spotify), otherwise just bring the player to the front (Apple Music).
+    /// Bring the player forward, on the track you are hearing.
+    ///
+    /// Deliberately *not* the track's deep link, though Spotify hands one out.
+    /// `spotify url of current track` is a `spotify:track:` URI, and opening a
+    /// track URI navigates to where the track lives — its album — not to the
+    /// playlist you are playing it from. Spotify's own bottom bar does the same
+    /// thing, and it is just as unhelpful there: you click the song you are
+    /// listening to and lose the queue you were listening to it in.
+    ///
+    /// The playlist is the *playback context*, and Spotify's scripting
+    /// dictionary has no property for it — only the Web API's
+    /// `GET /v1/player` does, which would mean OAuth and network requests, and
+    /// this app makes none. So the honest move is to open the app and leave you
+    /// wherever you already were, which for anyone who pressed play in a
+    /// playlist is that playlist. Stale at worst; never somewhere wrong.
     func openCurrentTrack() {
-        // Only follow the player's deep link for schemes we expect; anything
-        // else falls back to bringing the app forward rather than handing an
-        // arbitrary URL to the system opener.
-        let allowedSchemes: Set<String> = ["spotify", "https", "http"]
-        if let url = track?.url, let scheme = url.scheme?.lowercased(),
-           allowedSchemes.contains(scheme) {
-            NSWorkspace.shared.open(url)
-        } else {
-            active.activate()
-        }
+        active.activate()
     }
 
     private func scheduleQuickRefresh() {

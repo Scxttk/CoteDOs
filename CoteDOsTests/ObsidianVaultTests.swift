@@ -58,4 +58,36 @@ final class ObsidianVaultTests: XCTestCase {
         let next = result.range(of: "## Next")!
         XCTAssertTrue(bullet.upperBound < next.lowerBound)
     }
+
+    // MARK: Headings that have been dressed up
+
+    /// The real one: a daily-note template switched to Obsidian's Iconize
+    /// plugin, the settings field still said `## 📥 Capture`, and every capture
+    /// from then on went to a second section at the bottom of the note — under
+    /// "Plan für morgen", which is not where anybody looks for them.
+    func testFindsTheHeadingBehindAnIconToken() {
+        let content = "## :LiInbox: Capture\n\n- \n\n## 🌙 Plan für morgen\n\n- \n"
+        let result = ObsidianVault.appending(bullet: "- captured", underHeading: heading, to: content)
+        XCTAssertFalse(result.contains("## 📥 Capture"), "must not invent a second section")
+        let bullet = result.range(of: "- captured")!
+        let plan = result.range(of: "## 🌙 Plan für morgen")!
+        XCTAssertTrue(bullet.upperBound < plan.lowerBound, "belongs in the section that is already there")
+    }
+
+    func testMatchesAcrossDecoration() {
+        XCTAssertEqual(ObsidianVault.headingWords("## 📥 Capture"), "capture")
+        XCTAssertEqual(ObsidianVault.headingWords("## :LiInbox: Capture"), "capture")
+        XCTAssertEqual(ObsidianVault.headingWords("##Capture"), "capture")
+        XCTAssertEqual(ObsidianVault.headingWords("## :LiSunrise: Heute geplant"), "heute geplant")
+        // The icon name must not survive as letters.
+        XCTAssertFalse(ObsidianVault.headingWords("## :LiInbox: Capture").contains("li"))
+    }
+
+    /// Ignoring decoration must not start matching different sections.
+    func testDoesNotMatchADifferentHeading() {
+        let content = "## :LiNotebook: Log\n\n- entry\n"
+        let result = ObsidianVault.appending(bullet: "- captured", underHeading: heading, to: content)
+        XCTAssertTrue(result.contains("## 📥 Capture"), "no Capture section here, so it makes one")
+        XCTAssertTrue(result.range(of: "- entry")!.upperBound < result.range(of: "## 📥 Capture")!.lowerBound)
+    }
 }

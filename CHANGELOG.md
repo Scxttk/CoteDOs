@@ -108,6 +108,13 @@ the README never mentioned the difference.
 - The shelf centres its files instead of laying them out from the left edge with
   half the page empty beside them.
 - The tab icons are no longer pressed against the top rim of the island.
+- **The now-playing cover brings the player forward instead of deep-linking to
+  the track.** A `spotify:track:` URI opens the song where it *lives* — its
+  album — not the playlist you are playing it from, which is the one thing you
+  wanted. The playlist is the playback context, and Spotify's scripting
+  dictionary has no property for it; only the Web API does, and this app makes
+  no network requests. Opening the player leaves you where you already were,
+  which for anyone who pressed play in a playlist is that playlist.
 
 ### Removed
 - **The spectrum's style and colour settings.** Solid, Shades, Alternating and
@@ -143,6 +150,14 @@ the README never mentioned the difference.
   to show.
 - In Capture, the button showing Obsidian's icon opened Terminal, and the one
   that opened Obsidian was an unlabelled diamond next to it.
+- **Capture finds its heading even when the heading has been decorated.** It
+  matched the configured text exactly, so a daily-note template switching to
+  Obsidian's Iconize plugin — `## :LiInbox: Capture` where the settings field
+  said `## 📥 Capture` — stopped matching, and every capture from then on went
+  into a second section the app appended to the *bottom* of the note, under
+  "Plan für morgen". Nothing said so; you find out when you go looking for
+  something you filed. Emoji, icon tokens and punctuation are ignored now, and
+  the words are what count.
 
 ## [1.4.0] – 2026-07-24
 
