@@ -480,7 +480,7 @@ enum NotchLayout {
     /// the surviving content. Deliberately much faster than the width spring:
     /// text must be gone *before* the narrowing rounded ends sweep over its
     /// position, or clipped letter fragments linger at the rim.
-    static let condenseFadeAnimation: Animation = .easeOut(duration: 0.15)
+    static var condenseFadeAnimation: Animation { Motion.gate(.easeOut(duration: 0.15)) }
 
     // The pill ⇄ condensed-icon handover is a hard cut (see `iconHandover`
     // in NotchView) — it deliberately has no timing constants: every
@@ -604,7 +604,7 @@ enum NotchLayout {
     /// Silhouette morph for live-activity pills appearing/dismissing in the
     /// collapsed pill (not the expand/collapse walk). A small, lively spring —
     /// damping low enough for a visible snap, like the iPhone's island pills.
-    static let islandMorphAnimation: Animation = .spring(response: 0.40, dampingFraction: 0.74)
+    static var islandMorphAnimation: Animation { Motion.gate(.spring(response: 0.40, dampingFraction: 0.74)) }
 
     /// The page ⇄ fullscreen leg of the spectrum morph.
     ///
@@ -616,31 +616,31 @@ enum NotchLayout {
     /// distance, and damped nearly flat: at page size a little overshoot is a
     /// bit of life, at screen size the same proportional overshoot is a wobble
     /// across the whole display.
-    static let spectrumFullscreenMorphAnimation: Animation = .spring(response: 0.58, dampingFraction: 0.88)
+    static var spectrumFullscreenMorphAnimation: Animation { Motion.gate(.spring(response: 0.58, dampingFraction: 0.88)) }
 
     /// Silhouette morph (frame + corner radius) for each *collapse* stage. A
     /// bounce-free `.smooth` spring: collapsing reads as a calm, silky settling,
     /// never a snap or wobble — overshoot on *closing* looks wrong.
-    static let islandCollapseAnimation: Animation = .smooth(duration: 0.55)
+    static var islandCollapseAnimation: Animation { Motion.gate(.smooth(duration: 0.55)) }
     /// Each *intermediate* expand stage — quicker than the collapse so opening
     /// on hover feels snappy, with a whisper of bounce for life. These hops are
     /// re-animated almost immediately, so real overshoot would just wobble.
-    static let islandExpandAnimation: Animation = .snappy(duration: 0.30, extraBounce: 0.1)
+    static var islandExpandAnimation: Animation { Motion.gate(.snappy(duration: 0.30, extraBounce: 0.1)) }
     /// The *final* expand hop (`.band → .expanded`) is the only one that rests,
     /// so it can afford a genuine overshoot-and-settle — the Dynamic-Island
     /// "pop" that the intermediate hops must not have.
-    static let islandExpandFinalAnimation: Animation = .spring(response: 0.42, dampingFraction: 0.70)
+    static var islandExpandFinalAnimation: Animation { Motion.gate(.spring(response: 0.42, dampingFraction: 0.70)) }
 
     /// Content fade-in on expand: slightly delayed so it appears once the
     /// silhouette has grown enough room, then springs out of the pill with the
     /// same character as the silhouette's final pop.
-    static let contentInsertAnimation: Animation = .spring(response: 0.35, dampingFraction: 0.75).delay(0.05)
+    static var contentInsertAnimation: Animation { Motion.gate(.spring(response: 0.35, dampingFraction: 0.75).delay(0.05)) }
     /// Content fade-out on collapse: fast easeIn so the content is gone *before*
     /// the silhouette finishes shrinking (nothing lingers outside the shape).
     /// Long enough that the active tab glyph's matched-geometry flight into the
     /// pill is readable before the rest fades. Never springy — removal that
     /// bounces reads as broken.
-    static let contentRemoveAnimation: Animation = .easeIn(duration: 0.16)
+    static var contentRemoveAnimation: Animation { Motion.gate(.easeIn(duration: 0.16)) }
     /// Starting scale of inserted content — the "grow out of the pill" morph,
     /// pronounced enough to register now that the insert is a spring.
     static let contentMorphScale: CGFloat = 0.93
@@ -648,7 +648,7 @@ enum NotchLayout {
     /// Switching tabs (tap button and horizontal swipe both use it) — drives the
     /// page carousel offset and the tab bar's sliding selection capsule. A hint
     /// of overshoot; the pages are clipped, so it can't escape the island.
-    static let tabChangeAnimation: Animation = .spring(response: 0.35, dampingFraction: 0.74)
+    static var tabChangeAnimation: Animation { Motion.gate(.spring(response: 0.35, dampingFraction: 0.74)) }
 
     /// Scale of the tab pages that aren't front — they sit slightly shrunken and
     /// dimmed beside the active page and grow in as they slide to front.

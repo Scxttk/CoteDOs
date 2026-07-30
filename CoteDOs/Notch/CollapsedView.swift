@@ -27,6 +27,28 @@ struct CollapsedView: View {
         WaveTints.resolve(nowPlaying: nowPlaying, sourceBundleID: spectrum.sourceBundleID, sourceAppTint: sourceApp.tint)
     }
 
+    /// What VoiceOver says for the pill as a whole.
+    ///
+    /// One label on the container rather than labels on the parts: the pill is a
+    /// cover thumbnail, a wave and sometimes a timer readout, none of which mean
+    /// anything read out individually — "image, image, 24 colon 13" is worse than
+    /// silence. Read as one sentence it is the same thing a sighted glance gets.
+    private var spokenSummary: String {
+        var parts: [String] = []
+        if let track = nowPlaying.track, hasAudioHero {
+            parts.append("\(track.name) — \(track.artist)")
+        } else if hasAudioHero {
+            parts.append(String(localized: "a11y.pill.audio", defaultValue: "Ton läuft"))
+        }
+        if let timer = pomodoro.pillText { parts.append(timer) }
+        if !shelf.items.isEmpty {
+            parts.append(String(localized: "a11y.pill.shelf", defaultValue: "\(shelf.items.count) Dateien in der Ablage"))
+        }
+        return parts.isEmpty
+            ? String(localized: "a11y.pill.idle", defaultValue: "Côte d'OS")
+            : parts.joined(separator: ", ")
+    }
+
     var body: some View {
         let tints = self.tints
         // Spacings/paddings here must stay in lock-step with the width estimate
@@ -155,6 +177,9 @@ struct CollapsedView: View {
         // expand/collapse walk's explicit withAnimation calls.
         .animation(NotchLayout.islandMorphAnimation, value: settings.pillSpectrumOnly)
         .animation(NotchLayout.islandMorphAnimation, value: settings.pillSpectrumWidth)
+        // One element, one sentence — see `spokenSummary`.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spokenSummary)
     }
 
     /// The passive focus-timer readout. Sizes must stay in lock-step with the

@@ -1,6 +1,24 @@
 {
   "sourceLanguage" : "de",
   "strings" : {
+    "a11y.pill.audio" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ton läuft" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Audio playing" } }
+      }
+    },
+    "a11y.pill.idle" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Côte d'OS" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Côte d'OS" } }
+      }
+    },
+    "a11y.pill.shelf" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%lld Dateien in der Ablage" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld files on the shelf" } }
+      }
+    },
     "activity.fileReceived.many" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "%lld Dateien abgelegt" } },
@@ -119,6 +137,36 @@
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "An Daily Note anhängen" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Append to the daily note" } }
+      }
+    },
+    "control.next" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nächster Titel" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Next track" } }
+      }
+    },
+    "control.output" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ausgabegerät" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Output device" } }
+      }
+    },
+    "control.pause" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Pause" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pause" } }
+      }
+    },
+    "control.play" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Abspielen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Play" } }
+      }
+    },
+    "control.previous" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Vorheriger Titel" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Previous track" } }
       }
     },
     "menu.launchAtLogin" : {

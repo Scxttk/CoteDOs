@@ -22,6 +22,11 @@ struct ControlButton: View {
     let systemName: String
     var size: CGFloat
     var color: Color = .white
+    /// Spoken name. Required rather than optional on purpose: a `Button` whose
+    /// label is only an `Image(systemName:)` announces nothing at all to
+    /// VoiceOver, so every transport control here was silent, and an argument you
+    /// can forget is an argument that gets forgotten.
+    let label: String
     let action: () -> Void
 
     @State private var hovering = false
@@ -38,6 +43,7 @@ struct ControlButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(label)
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.12), value: hovering)
     }

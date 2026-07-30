@@ -223,13 +223,20 @@ struct NowPlayingView: View {
 
     private var controlsRow: some View {
         HStack(spacing: 16) {
-            ControlButton(systemName: "backward.fill", size: 15, action: nowPlaying.previousTrack)
+            ControlButton(systemName: "backward.fill", size: 15,
+                          label: String(localized: "control.previous", defaultValue: "Vorheriger Titel"),
+                          action: nowPlaying.previousTrack)
             ControlButton(
                 systemName: nowPlaying.isPlaying ? "pause.fill" : "play.fill",
                 size: 20,
+                label: nowPlaying.isPlaying
+                    ? String(localized: "control.pause", defaultValue: "Pause")
+                    : String(localized: "control.play", defaultValue: "Abspielen"),
                 action: nowPlaying.playPause
             )
-            ControlButton(systemName: "forward.fill", size: 15, action: nowPlaying.nextTrack)
+            ControlButton(systemName: "forward.fill", size: 15,
+                          label: String(localized: "control.next", defaultValue: "Nächster Titel"),
+                          action: nowPlaying.nextTrack)
             outputPicker
         }
         .frame(maxWidth: .infinity, alignment: .center)
@@ -250,6 +257,7 @@ struct NowPlayingView: View {
             }
         } label: {
             Image(systemName: "airplayaudio")
+                .accessibilityLabel(String(localized: "control.output", defaultValue: "Ausgabegerät"))
                 .font(.system(size: 14))
                 .foregroundStyle(.white.opacity(0.8))
                 .frame(width: 34, height: 32)
