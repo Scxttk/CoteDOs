@@ -70,6 +70,18 @@ the README never mentioned the difference.
   NotchMate" since the rename, because the string catalog quietly overrode the
   code.
 - Five tabs instead of six.
+- **The tab bar is icons only, and the icons are twice the size.** They used to
+  inherit the label's 13 pt and then the whole row was scaled to 0.72 to fit five
+  German titles into the island — about 9 pt of icon. Without the titles the row
+  fits at full size, and the selected tab sits in a filled capsule instead. The
+  names are still there on hover, and VoiceOver reads them.
+- **Capture is somewhere to write.** It was a one-line field that looked like a
+  search box and behaved like one — a thought longer than a few words scrolled
+  sideways out of its own field as you typed it. It is a card that grows to four
+  lines now. Return still files the note, Shift-Return breaks a line.
+- The shelf centres its files instead of laying them out from the left edge with
+  half the page empty beside them.
+- The tab icons are no longer pressed against the top rim of the island.
 
 ### Removed
 - **The Claude tab.** It read Claude Code's OAuth credential out of the login
@@ -91,6 +103,15 @@ the README never mentioned the difference.
   spectrum.
 - A small CoreAudio string leak on the path the resume probe walks every two
   seconds.
+- **Loud passages no longer drain the spectrum of its colour.** Each bar fades
+  from its own colour toward a paler foot — measured off an iPhone's island,
+  whose bars are about 13 pt tall — and that fade was applied in proportion to
+  the bar. On the spectrum page's much taller bars it covered nearly the whole
+  bar, so the louder the music got, the whiter the wave went, until fullscreen
+  was white. The collapsed pill is unchanged; it was never tall enough for this
+  to show.
+- In Capture, the button showing Obsidian's icon opened Terminal, and the one
+  that opened Obsidian was an unlabelled diamond next to it.
 
 ## [1.4.0] – 2026-07-24
 
