@@ -1,0 +1,69 @@
+name: Bug report
+description: Something in the notch isn't behaving
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Three answers up front save a round trip almost every time: your macOS
+        version, whether the spectrum works, and which permissions are granted.
+        Most reports turn out to be one of those.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: And what you expected instead.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Côte d'OS version
+      description: Settings → Allgemein shows it at the bottom, as `1.5.0 (7)`.
+      placeholder: 1.5.0 (7)
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: >
+        The audio spectrum needs 14.4 — below that it draws a procedural
+        animation instead, which looks like a wave that ignores your music.
+      placeholder: "26.5.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: spectrum
+    attributes:
+      label: Does the spectrum react to the music?
+      options:
+        - Yes, the bars follow the audio
+        - It animates, but ignores what's playing
+        - The bars are frozen flat
+        - Not using the spectrum
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: permissions
+    attributes:
+      label: Permissions granted
+      description: >
+        System Settings → Privacy & Security. Audio Recording is filed under
+        **Audio Recording**, not Microphone.
+      options:
+        - label: Automation (Spotify / Music / Safari / Chrome / Terminal)
+        - label: Accessibility
+        - label: Audio Recording
+
+  - type: input
+    id: mac
+    attributes:
+      label: Mac model
+      description: Apple silicon or Intel, and whether the display has a physical notch.
+      placeholder: MacBook Air M1, no notch

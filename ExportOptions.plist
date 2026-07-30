@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Developer ID, not app-store: the app is deliberately unsandboxed, so the
+	     Mac App Store is not a target. See the entitlements file. -->
+	<key>method</key>
+	<string>developer-id</string>
+	<key>teamID</key>
+	<string>3DZ9T8SGX5</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<!-- Notarization rejects get-task-allow, and automatic signing with the free
+	     team's "Apple Development" identity puts it in the Release artifact. A
+	     developer-id export re-signs without it. Check, don't assume:
+	       codesign -d --entitlements - --xml CoteDOs.app | plutil -p -  -->
+</dict>
+</plist>
