@@ -25,22 +25,6 @@ final class SafariDodgeTests: XCTestCase {
                        "pill's right edge must keep the margin from the screen edge")
     }
 
-    func testFallbackWithoutAXPositionsRightOfCentre() {
-        let pillWidth: CGFloat = 120
-        let centerX = SafariFullscreenMonitor.dodgePillCenterX(
-            urlFieldMaxX: nil, screenFrame: screen, pillWidth: pillWidth)
-        XCTAssertEqual(centerX, screen.midX + NotchLayout.safariDodgeFallbackOffset)
-        XCTAssertLessThanOrEqual(centerX + pillWidth / 2, screen.maxX - NotchLayout.safariDodgeEdgeMargin)
-    }
-
-    func testFallbackClampsOnNarrowScreens() {
-        let narrow = NSRect(x: 0, y: 0, width: 800, height: 600)
-        let pillWidth: CGFloat = 240
-        let centerX = SafariFullscreenMonitor.dodgePillCenterX(
-            urlFieldMaxX: nil, screenFrame: narrow, pillWidth: pillWidth)
-        XCTAssertEqual(centerX + pillWidth / 2, narrow.maxX - NotchLayout.safariDodgeEdgeMargin)
-    }
-
     func testSecondaryScreenOffsetIsRespected() {
         // Screens left of the primary have negative X — the clamp must work in
         // that coordinate space too.
@@ -49,5 +33,30 @@ final class SafariDodgeTests: XCTestCase {
             urlFieldMaxX: -600, screenFrame: secondary, pillWidth: 100)
         XCTAssertEqual(centerX, -600 + NotchLayout.safariDodgeGap + 50)
         XCTAssertLessThan(centerX, secondary.maxX)
+    }
+
+    // MARK: Visibility gate — the dodge only applies while the toolbar is on
+    // screen. A video put fullscreen from the page (`f` on YouTube/Twitch)
+    // reports the window as fullscreen with the toolbar gone.
+
+    func testToolbarFieldUnderTheNotchIsVisible() {
+        let field = NSRect(x: 500, y: screen.maxY - 52, width: 700, height: 30)
+        XCTAssertTrue(SafariFullscreenMonitor.isURLFieldVisible(field, on: screen))
+    }
+
+    func testFieldParkedAboveTheTopEdgeIsNotVisible() {
+        // Safari can keep a hidden toolbar in the AX tree, slid off the top.
+        let field = NSRect(x: 500, y: screen.maxY - 10, width: 700, height: 30)
+        XCTAssertFalse(SafariFullscreenMonitor.isURLFieldVisible(field, on: screen))
+    }
+
+    func testEmptyFieldIsNotVisible() {
+        let field = NSRect(x: 500, y: screen.maxY - 52, width: 0, height: 0)
+        XCTAssertFalse(SafariFullscreenMonitor.isURLFieldVisible(field, on: screen))
+    }
+
+    func testFieldOnAnotherScreenIsNotVisible() {
+        let field = NSRect(x: -1400, y: 1000, width: 700, height: 30)
+        XCTAssertFalse(SafariFullscreenMonitor.isURLFieldVisible(field, on: screen))
     }
 }

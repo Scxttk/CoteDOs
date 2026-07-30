@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import IOKit.pwr_mgt
 import SwiftUI
 
 /// The spectrum taking over the whole screen — for a room with music in it, or
@@ -16,8 +17,15 @@ import SwiftUI
 /// island and the island into the screen; up walks it back.
 final class SpectrumFullscreenController {
     private var window: NSWindow?
-    private var scrollMonitor: Any?
+    private var keyMonitor: Any?
     private var cancellables: Set<AnyCancellable> = []
+    /// Held for as long as the takeover is up, so the display doesn't go dark
+    /// under it — and the Mac doesn't walk on into its lock screen. This is
+    /// what lets the takeover *replace* the display sleeping (see
+    /// `IdleSpectrumMonitor`) instead of being wiped out by it 15 seconds
+    /// later. Released the moment the window goes away; nothing else in the
+    /// app keeps the screen alive.
+    private var displaySleepAssertion: IOPMAssertionID = 0
 
     private let spectrum: SpectrumAnalyzer
     private let nowPlaying: NowPlayingManager
@@ -78,26 +86,54 @@ final class SpectrumFullscreenController {
         // works either way (Carbon, system-wide).
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
-        installScrollMonitor()
+        installKeyMonitor()
+        holdDisplayAwake()
     }
 
-    /// Two fingers up sends it back to the island — the same axis that brought
-    /// it here, in reverse. Deliberately the *only* pointer-driven way out: a
-    /// stray click should not end a visual that is meant to be left running.
-    /// ⌥⌘S remains as the failsafe.
-    private func installScrollMonitor() {
-        removeScrollMonitor()
-        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            guard event.scrollingDeltaY < -NotchLayout.gestureScrollThreshold,
-                  abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) else { return event }
-            self?.state.dismiss()
+    private func holdDisplayAwake() {
+        guard displaySleepAssertion == 0 else { return }
+        var assertion: IOPMAssertionID = 0
+        let result = IOPMAssertionCreateWithName(
+            kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
+            IOPMAssertionLevel(kIOPMAssertionLevelOn),
+            "Côte d'OS Spektrum" as CFString,
+            &assertion
+        )
+        if result == kIOReturnSuccess { displaySleepAssertion = assertion }
+    }
+
+    private func releaseDisplayAwake() {
+        guard displaySleepAssertion != 0 else { return }
+        IOPMAssertionRelease(displaySleepAssertion)
+        displaySleepAssertion = 0
+    }
+
+    /// Escape closes the takeover — the key everyone already tries first for
+    /// anything filling the screen. A local monitor is enough because `show()`
+    /// activates the app and makes this window key.
+    ///
+    /// An *armed* takeover swallows every key instead, and turns each of them
+    /// into the same dismissal. Not for tidiness: ⌘Q reached the app's menu and
+    /// quit it, which took the takeover down without ever locking — a way past
+    /// the guard that needed no password and left no trace. Anything the
+    /// monitor's half-second poll would have caught, this catches at once.
+    private func installKeyMonitor() {
+        removeKeyMonitor()
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            guard !state.isArmed else {
+                state.dismiss()
+                return nil
+            }
+            guard event.keyCode == 53 else { return event }   // Esc
+            state.dismiss()
             return nil
         }
     }
 
-    private func removeScrollMonitor() {
-        if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor) }
-        scrollMonitor = nil
+    private func removeKeyMonitor() {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        keyMonitor = nil
     }
 
     /// The view is already animating the wave back down; give it that long
@@ -109,7 +145,8 @@ final class SpectrumFullscreenController {
     }
 
     private func close() {
-        removeScrollMonitor()
+        removeKeyMonitor()
+        releaseDisplayAwake()
         window?.orderOut(nil)
         window = nil
     }
@@ -121,6 +158,10 @@ private struct SpectrumFullscreenView: View {
     @ObservedObject var spectrum: SpectrumAnalyzer
     @ObservedObject var nowPlaying: NowPlayingManager
     @ObservedObject var state: SpectrumFullscreen
+    /// Icon and accent of whichever app is making the sound — the same answer
+    /// the island's wave uses, so the third leg of the morph doesn't change
+    /// colour on the way out to the screen.
+    @ObservedObject private var sourceApp = SourceAppAccent.shared
     /// The screen this is filling, for working out how far the wave has to grow.
     let screenSize: CGSize
 
@@ -133,22 +174,34 @@ private struct SpectrumFullscreenView: View {
     @State private var landed = false
 
     var body: some View {
-        ZStack {
+        let tints = WaveTints.resolve(
+            nowPlaying: nowPlaying, sourceBundleID: spectrum.sourceBundleID, sourceAppTint: sourceApp.tint)
+        return ZStack {
             Color.black
             SpectrumStageView(
                 levels: levels,
                 isLive: spectrum.isLive,
                 isActive: nowPlaying.screensAwake,
-                tint: nowPlaying.track != nil ? nowPlaying.artworkColor : nil,
-                secondaryTint: nowPlaying.track != nil ? nowPlaying.artworkSecondaryColor : nil,
-                tertiaryTint: nowPlaying.track != nil ? nowPlaying.artworkTertiaryColor : nil,
-                coverBars: nowPlaying.track != nil ? nowPlaying.coverBars : nil,
-                // One step up the same chain: fly out of the island's page near
-                // the top of the screen, and back into it on the way out.
-                morphOrigin: WaveMorphOrigin(
-                    scale: NotchLayout.pageToFullscreenWaveScale(screenSize: screenSize),
-                    offsetY: NotchLayout.pageToFullscreenWaveOffset(screenSize: screenSize)
-                ),
+                tint: tints.primary,
+                secondaryTint: tints.secondary,
+                tertiaryTint: tints.tertiary,
+                coverBars: tints.coverBars,
+                // Out of the island's page on the way in, home to the pill on
+                // the way out. Not symmetric on purpose: Escape collapses the
+                // island as it dismisses, so aiming the run back at the page
+                // would land it on something that is itself disappearing —
+                // which is exactly what the old swipe-out did, and why it read
+                // as broken. The pill is where the wave actually ends up, so
+                // that is what it should fly to.
+                morphOrigin: state.isCollapsing
+                    ? WaveMorphOrigin(
+                        scale: NotchLayout.pillToFullscreenWaveScale(screenSize: screenSize),
+                        offsetY: NotchLayout.pillToFullscreenWaveOffset(screenSize: screenSize)
+                    )
+                    : WaveMorphOrigin(
+                        scale: NotchLayout.pageToFullscreenWaveScale(screenSize: screenSize),
+                        offsetY: NotchLayout.pageToFullscreenWaveOffset(screenSize: screenSize)
+                    ),
                 // Same run the island is showing, so the third leg of the morph
                 // is the same wave again rather than a differently-resolved one.
                 // Only while there *is* such a run to continue: without the
@@ -159,7 +212,9 @@ private struct SpectrumFullscreenView: View {
                     ? NotchLayout.pillSpectrumGeometry(
                         forWidth: UserSettings.shared.pillSpectrumWidth).barCount
                     : nil,
-                landed: landed && !state.isCollapsing
+                landed: landed && !state.isCollapsing,
+                // Not the island's spring: this leg crosses the whole screen.
+                morphAnimation: NotchLayout.spectrumFullscreenMorphAnimation
             )
             .padding(NotchLayout.stageInset * 2)
         }

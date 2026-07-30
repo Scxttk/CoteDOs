@@ -229,6 +229,20 @@ final class NotchWindowController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.applySafariDodge() }
             .store(in: &cancellables)
+
+        // Escape out of the fullscreen takeover goes all the way home to the
+        // pill, not back to the island page it was opened from. The wave is
+        // already flying to the pill's pose (see
+        // `SpectrumFullscreenController`), so the island has to be collapsing
+        // underneath it or the run would land on a page still standing open.
+        // Via `collapseViaGesture`, so the cursor sitting over the island
+        // doesn't immediately hover it back open.
+        SpectrumFullscreen.shared.$isCollapsing
+            .removeDuplicates()
+            .filter { $0 }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.collapseViaGesture() }
+            .store(in: &cancellables)
     }
 
     // MARK: - Idle presence
@@ -461,19 +475,15 @@ final class NotchWindowController {
         if let dodge = safariDodge, let screen = currentScreen, dodge.screen === screen {
             let pillWidth = viewModel.collapsedWidth(isPlaying: hasAudioHero, hasItems: !shelf.items.isEmpty, timerText: pomodoro.pillText)
             let centerX = SafariFullscreenMonitor.dodgePillCenterX(
-                urlFieldMaxX: dodge.urlFieldFrame?.maxX, screenFrame: screen.frame,
+                urlFieldMaxX: dodge.urlFieldFrame.maxX, screenFrame: screen.frame,
                 pillWidth: pillWidth)
             targetOffset = centerX - screen.frame.midX
             // Vertically centre the pill on the URL field (nudged up by the
             // raise — the AX frame hugs the text, the visible container reads
             // higher) so it nestles beside the toolbar instead of hugging the
             // screen's top edge.
-            if let field = dodge.urlFieldFrame {
-                let restingCenterY = screen.frame.maxY - NotchLayout.islandTopGap - viewModel.collapsedHeight / 2
-                targetYOffset = max(0, (restingCenterY - field.midY - NotchLayout.safariDodgeRaise).rounded())
-            } else {
-                targetYOffset = 0
-            }
+            let restingCenterY = screen.frame.maxY - NotchLayout.islandTopGap - viewModel.collapsedHeight / 2
+            targetYOffset = max(0, (restingCenterY - dodge.urlFieldFrame.midY - NotchLayout.safariDodgeRaise).rounded())
             active = true
         } else {
             targetOffset = 0
@@ -711,6 +721,13 @@ final class NotchWindowController {
                 // Respect the post-swipe suppression so a swipe-up close isn't
                 // instantly undone by a stationary cursor.
                 if !suppressHover { setExpanded(true) }
+            } else if !shelf.isDropTargeted && viewModel.holdsIslandOpen {
+                // The spectrum page is up: something to leave running and watch,
+                // so the cursor leaving means nothing. No grace timer either —
+                // this releases itself on a tab change or a close, so it can't
+                // get stuck the way the capture lock could. Swipe up (or ⌥⌘S to
+                // take it fullscreen) remains the way out.
+                collapseWorkItem?.cancel()
             } else if !shelf.isDropTargeted && !viewModel.isInteractionLocked {
                 // Cursor left the fully-expanded footprint: collapse
                 // immediately. The hover monitor is deterministic, so no
@@ -851,14 +868,12 @@ final class NotchWindowController {
         // Vertical swipe -> expand / collapse.
         guard abs(dy) > threshold, abs(dy) > abs(dx) else { return false }
         if dy > 0 {
-            // One axis, three sizes: down goes bigger each time. Already open on
-            // the spectrum tab, the next swipe down hands it the whole screen
-            // (swiping up there brings it back — see `SpectrumFullscreenController`).
-            if viewModel.isExpanded, viewModel.selectedTab == .spectrum {
-                SpectrumFullscreen.shared.present()
-            } else {
-                expandViaGesture()
-            }
+            // Swiping only ever opens the island — it no longer carries on into
+            // the fullscreen takeover. That third step is a click on the
+            // spectrum page, and Escape brings it home; a scroll gesture landing
+            // you in a full-screen visual you didn't ask for was too easy to
+            // trigger by accident. ⌥⌘S remains the keyboard route.
+            expandViaGesture()
         } else {
             collapseViaGesture()
         }

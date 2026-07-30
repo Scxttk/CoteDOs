@@ -8,6 +8,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Owns the fullscreen-spectrum window. Created at launch but idle until
     /// something asks for the takeover (a tap on the spectrum page, or ⌥⌘S).
     private var spectrumFullscreen: SpectrumFullscreenController?
+    /// Watches for an untouched Mac with music running and hands the screen to
+    /// the takeover just before macOS would blank it.
+    private var idleSpectrum: IdleSpectrumMonitor?
 
     let viewModel = NotchViewModel()
     let nowPlaying = NowPlayingManager()
@@ -42,6 +45,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         applyAppearance(UserSettings.shared.appearance)
 
+        // Turns the analyzer's source bundle ID into the icon and accent the
+        // waves tint themselves with. Read as a singleton from the view bodies,
+        // so it only needs pointing at the analyzer once.
+        SourceAppAccent.shared.follow(spectrum)
+
         let controller = NotchWindowController(viewModel: viewModel, nowPlaying: nowPlaying, shelf: shelf, activities: activities, pomodoro: pomodoro, capture: capture, spectrum: spectrum, claudeUsage: claudeUsage, claudeDriver: claudeDriver)
         controller.show()
         windowController = controller
@@ -55,10 +63,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         spectrumFullscreen = SpectrumFullscreenController(spectrum: spectrum, nowPlaying: nowPlaying)
         // ⌥⌘S toggles the fullscreen spectrum from anywhere, so it can be put up
-        // (and taken down) without going through the island first.
+        // (and taken down) without going through the island first. Armed: the
+        // hotkey is how you leave the Mac on purpose, so whatever ends the
+        // takeover — you coming back, or somebody else touching it — locks the
+        // machine, and you can tell which happened by what you find on return.
         HotKeyCenter.shared.register(.spectrumFullscreen) {
-            SpectrumFullscreen.shared.toggle()
+            SpectrumFullscreen.shared.toggle(armed: true)
         }
+        let idleSpectrum = IdleSpectrumMonitor(spectrum: spectrum, activities: activities)
+        idleSpectrum.start()
+        self.idleSpectrum = idleSpectrum
 
         nowPlaying.start()
         activities.start()
@@ -85,11 +99,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Quitting while the takeover is guarding the Mac must not be a way out
+        // of it: whatever route got here (the menu bar's Quit, a `kill`), the
+        // machine locks on the way down, exactly as it would have if the
+        // takeover had been dismissed. `SIGKILL` is beyond reach — nothing in
+        // userland survives that — but every ordinary quit is covered.
+        if SpectrumFullscreen.shared.isPresented, SpectrumFullscreen.shared.isArmed {
+            ScreenLock.lockNow()
+        }
         nowPlaying.stop()
         activities.stop()
         systemHUD.stop()
         spectrum.stop()
         capture.stop()
+        idleSpectrum?.stop()
         // Session state is already persisted on every transition; just disarm
         // the 1s tick. The wall-clock session resumes on the next launch.
         pomodoro.suspendTicking()
@@ -124,6 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         spectrum.stop()
         pomodoro.suspendTicking()
         windowController?.suspendMonitors()
+        idleSpectrum?.stop()
     }
 
     @objc private func systemDidWake() {
@@ -132,11 +156,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         systemHUD.start(presenting: activities)
         pomodoro.resumeTicking()
         windowController?.resumeMonitors()
+        idleSpectrum?.start()
     }
 
     @objc private func screensDidSleep() {
         nowPlaying.setScreensAwake(false)
         pomodoro.setScreensAwake(false)
+        // The display went dark anyway (the takeover wasn't up, or something
+        // else blanked it): there is nothing to watch for until it comes back.
+        idleSpectrum?.stop()
         // The AX polls (Safari fullscreen, menu-bar overlap) answer questions
         // about a display nobody can see — stop them with the screen, not
         // just with system sleep.
@@ -147,6 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         nowPlaying.setScreensAwake(true)
         pomodoro.setScreensAwake(true)
         windowController?.resumeMonitors()
+        idleSpectrum?.start()
     }
 
     @objc private func screenParametersChanged() {

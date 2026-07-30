@@ -71,6 +71,11 @@ final class SpectrumAnalyzer: ObservableObject {
     /// why the listener-based equivalent proved unreliable for the on/off signal.
     @Published private(set) var sourceBundleID: String?
     private var sourceCheckTimer: DispatchSourceTimer?
+    /// The process objects the current tap was built for. A tap is bound to the
+    /// processes it was created with, so when a different app starts playing the
+    /// tap has to be rebuilt or the wave would keep drawing the old app's audio
+    /// — or nothing, once that app quits.
+    private var tappedProcesses: [AudioObjectID] = []
 
     let bandCount: Int
 
@@ -241,9 +246,31 @@ final class SpectrumAnalyzer: ObservableObject {
         silentSeconds = 0
         guard #available(macOS 14.4, *) else { return }   // process taps are 14.4+
 
-        // 1. A private global tap of the system output — observes what's playing
-        //    without muting it or changing the user's output device.
-        let desc = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
+        // 1. A private tap of exactly the processes currently making sound —
+        //    not a global tap of the system output.
+        //
+        //    The difference is not cosmetic. A global tap attaches to the output
+        //    *device*, and with AirPods Pro that put them into their microphone
+        //    mode: macOS reported "CoteDOs — Mikrofon" and the stem stopped
+        //    skipping tracks, because a press was being read as mute rather than
+        //    transport. Tapping the playing processes instead never touches the
+        //    device. The app already scans for those processes every second for
+        //    the pill's source icon, so this costs nothing new.
+        //
+        //    Nothing playing means nothing to tap: leave the tap unbuilt and let
+        //    the source poll bring it back, which is the same path a silence
+        //    suspension already uses.
+        let processes = foreignOutputProcesses().map(\.id)
+        guard !processes.isEmpty else {
+            suspended = true
+            // `startSourceCheckTimer`, not `reschedule`: on a cold launch into
+            // silence the timer does not exist yet, and rescheduling nothing
+            // would leave the analyzer with no probe and therefore no way back.
+            startSourceCheckTimer()
+            return
+        }
+        tappedProcesses = processes
+        let desc = CATapDescription(stereoMixdownOfProcesses: processes)
         desc.isPrivate = true
         desc.muteBehavior = .unmuted
         var tap: AudioObjectID = 0
@@ -342,6 +369,7 @@ final class SpectrumAnalyzer: ObservableObject {
     /// Synchronous CoreAudio teardown, safe to call from `deinit`.
     private func teardown() {
         running = false
+        tappedProcesses = []
         if aggregateID != 0, let ioProcID {
             AudioDeviceStop(aggregateID, ioProcID)
             AudioDeviceDestroyIOProcID(aggregateID, ioProcID)
@@ -527,9 +555,18 @@ final class SpectrumAnalyzer: ObservableObject {
             }
         }
 
-        // Log-spaced bands from 40 Hz to ~16 kHz (or Nyquist).
+        // Log-spaced bands from 40 Hz to 12 kHz (or Nyquist).
+        //
+        // The ceiling was 16 kHz, which put the top band at 13.3–16 kHz — above
+        // where streamed audio keeps anything. That bar was visibly dead, and
+        // measurably so: replaying 30 s of speech through this exact math, band
+        // 31 averaged level 0.194 at a 16 kHz ceiling and 0.289 at 12 kHz. The
+        // envelope taxes the run's two end bars (see `WaveCanvas.envelope`), so
+        // the last bar needs ~0.19 before it leaves the height floor at all —
+        // the old ceiling parked it right on that line while the first bar,
+        // carrying bass at level ~1, cleared it constantly.
         let fMin = 40.0
-        let fMax = min(16_000.0, sampleRate / 2)
+        let fMax = min(12_000.0, sampleRate / 2)
         let binHz = sampleRate / Double(fftSize)
         // Snappier than before (was 0.6/0.82) — quicker to jump on a transient
         // and quicker to fall back between beats, so the bars visibly punch
@@ -723,7 +760,8 @@ final class SpectrumAnalyzer: ObservableObject {
 
     /// Runs on `queue`, self-rescheduling (the cadence depends on state).
     private func sourceTimerFired() {
-        let source = foreignOutputBundleID()
+        let playing = foreignOutputProcesses()
+        let source = playing.first.map { Self.attributedBundleID(for: $0.bundleID) }
         if suspended {
             // Anything producing output again is worth a tap: going from "no
             // app holds an output stream" to "one does" is a real transition,
@@ -739,16 +777,25 @@ final class SpectrumAnalyzer: ObservableObject {
             // the wave has to be ready to come back instantly.
             if silentSeconds >= Self.suspendAfterSeconds, source == nil {
                 DispatchQueue.main.async { [weak self] in self?.suspendForSilence() }
+            } else if playing.map(\.id) != tappedProcesses {
+                // The tap is bound to the processes it was built for, so a new
+                // app starting playback is invisible to it until it is rebuilt.
+                // Cheap, and rare in practice — a paused player keeps its stream
+                // open, so this fires on real app changes rather than on pauses.
+                trace("retapping — the set of playing processes changed")
+                DispatchQueue.main.async { [weak self] in self?.rebuildForDeviceChange() }
             }
         }
         rescheduleSourceCheckTimer()
     }
 
-    /// The (attributed) bundle ID of the first process other than us with an
-    /// active output stream, or nil. Doubles as the resume probe while
-    /// suspended: "someone is producing output again" is exactly the signal
-    /// that makes rebuilding the tap worthwhile.
-    private func foreignOutputBundleID() -> String? {
+    /// Every process other than us that currently holds an output stream, in
+    /// CoreAudio's own order, with its bundle ID.
+    ///
+    /// One scan serving two callers: the pill wants the first one's bundle ID
+    /// for its source icon, and `buildTap` wants the object IDs so it can tap
+    /// exactly those processes instead of the whole machine.
+    private func foreignOutputProcesses() -> [(id: AudioObjectID, bundleID: String)] {
         let ownBundleID = Bundle.main.bundleIdentifier
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyProcessObjectList,
@@ -757,11 +804,11 @@ final class SpectrumAnalyzer: ObservableObject {
         )
         var size: UInt32 = 0
         guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size) == noErr,
-              size > 0 else { return nil }
+              size > 0 else { return [] }
         let count = Int(size) / MemoryLayout<AudioObjectID>.size
         var processes = [AudioObjectID](repeating: 0, count: count)
         guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &processes) == noErr else {
-            return nil
+            return []
         }
 
         var isRunningAddress = AudioObjectPropertyAddress(
@@ -769,15 +816,31 @@ final class SpectrumAnalyzer: ObservableObject {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
+        var found: [(id: AudioObjectID, bundleID: String)] = []
         for process in processes {
             var isRunning: UInt32 = 0
             var runningSize = UInt32(MemoryLayout<UInt32>.size)
             guard AudioObjectGetPropertyData(process, &isRunningAddress, 0, nil, &runningSize, &isRunning) == noErr,
                   isRunning != 0 else { continue }
             guard let bundleID = stringProperty(process, kAudioProcessPropertyBundleID), bundleID != ownBundleID else { continue }
-            return Self.attributedBundleID(for: bundleID)
+            found.append((process, bundleID))
         }
-        return nil
+        return found
+    }
+
+    /// The (attributed) bundle ID of the first process holding an output
+    /// stream, or nil. Doubles as the resume probe while suspended: "someone is
+    /// producing output again" is exactly the signal that makes rebuilding the
+    /// tap worthwhile.
+    private func foreignOutputBundleID() -> String? {
+        guard let first = foreignOutputProcesses().first else { return nil }
+        let attributed = Self.attributedBundleID(for: first.bundleID)
+        // The raw ID alongside the attributed one: this is the only place that
+        // shows whether `attributedBundleID`'s WebKit prefix actually covers
+        // what CoreAudio reports for a browser, and which process won a scan
+        // that returns the first match with no priority.
+        trace(first.bundleID == attributed ? "source \(first.bundleID)" : "source \(first.bundleID) → \(attributed)")
+        return attributed
     }
 
     /// WebKit's audio/GPU XPC helpers (e.g. `com.apple.WebKit.GPU`) are what

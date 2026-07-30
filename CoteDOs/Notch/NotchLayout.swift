@@ -215,16 +215,35 @@ enum NotchLayout {
         let barWidth = max(1, height / waveBarAspectRatio)
         let spacing = barWidth * waveBarGapRatio
         let pitch = barWidth + spacing
-        let fits = forcedCount ?? Int(((width + spacing) / pitch).rounded())
-        let barCount = max(1, min(stageMaximumBars, fits))
-        // The stage spreads its run across the full width it was given, so the
-        // bars are re-fitted to it rather than left at the target thickness.
-        let fittedBarWidth = waveBarWidth(fitting: barCount, into: width)
+        guard let forcedCount else {
+            // Free-running: the count was chosen to fill the width, so re-fitting
+            // the bars into it only takes up the rounding slack.
+            let barCount = max(1, min(stageMaximumBars, Int(((width + spacing) / pitch).rounded())))
+            let fittedBarWidth = waveBarWidth(fitting: barCount, into: width)
+            return PillSpectrumGeometry(waveHeight: height,
+                                        barWidth: fittedBarWidth,
+                                        spacing: fittedBarWidth * waveBarGapRatio,
+                                        barCount: barCount,
+                                        runWidth: width)
+        }
+        // A *forced* count is the pill's, and is deliberately smaller than what
+        // fits here. Stretching it across the full width would trade the shared
+        // proportion rule away — fatter bars and wider gaps than a bar of this
+        // height should have — and with it the thing that makes the morph one
+        // scale factor: the pill's run is an exact fit for its count, so a page
+        // run stretched to the full width is not the same shape, and no single
+        // `scaleEffect` can carry both its height and its width. (Measured: a
+        // scale that matched the height left the run 146 pt against the pill's
+        // 112 pt.) So keep the target thickness and let the run be exactly as
+        // wide as its bars need; it is centred in the space it was given.
+        let barCount = max(1, min(stageMaximumBars, forcedCount))
+        let n = CGFloat(barCount)
+        let runWidth = min(width, n * barWidth + (n - 1) * spacing)
         return PillSpectrumGeometry(waveHeight: height,
-                                    barWidth: fittedBarWidth,
-                                    spacing: fittedBarWidth * waveBarGapRatio,
+                                    barWidth: barWidth,
+                                    spacing: spacing,
                                     barCount: barCount,
-                                    runWidth: width)
+                                    runWidth: runWidth)
     }
 
     /// Content area a carousel page gets inside the expanded panel. The row
@@ -261,44 +280,63 @@ enum NotchLayout {
     /// on the very frames the eye is following. Keeping the count fixed makes
     /// the morph purely geometric: the same bars, further apart and taller.
     static func spectrumPageWaveGeometry(barCount: Int) -> PillSpectrumGeometry {
-        let page = spectrumPageWaveGeometry
-        let count = max(1, barCount)
-        let barWidth = waveBarWidth(fitting: count, into: page.runWidth)
-        let spacing = barWidth * waveBarGapRatio
-        return PillSpectrumGeometry(waveHeight: page.waveHeight, barWidth: barWidth,
-                                    spacing: spacing, barCount: count, runWidth: page.runWidth)
+        // Straight through to the one implementation the page itself uses, so
+        // the travelling overlay and the page's own run cannot drift apart —
+        // this used to re-derive the geometry with a different rule, and did.
+        stageWaveGeometry(in: expandedPageSize, barCount: barCount)
     }
 
     /// Centre of the pill's wave, measured from the island's top edge.
     static var pillWaveCentreY: CGFloat { currentCollapsedHeight / 2 }
-    /// Centre of the spectrum page's wave, from the same origin — the tab bar
-    /// band sits above the page area.
+    /// Centre of the spectrum page's wave, from the same origin.
+    ///
+    /// Everything above the page area has to be counted, not just the tab bar:
+    /// the two sit in a `VStack` with `expandedRowSpacing` between them, so the
+    /// page *starts* at `currentCollapsedHeight + expandedRowSpacing`. Leaving
+    /// the spacing out put the travelling wave 8 pt above where the page draws
+    /// its own — invisible in flight, but the run jumped down by exactly that
+    /// much at the moment the page took the wave back over.
+    ///
+    /// Note this is not the same correction `expandedPageSize` already makes:
+    /// there the spacing is subtracted from the page's *height*, here it is
+    /// added to its *top*. Both are needed.
     static var pageWaveCentreY: CGFloat {
-        currentCollapsedHeight + expandedPageSize.height / 2
-    }
-
-    /// How far above the spectrum page's centre the pill's wave sits, measured
-    /// in the page's own coordinates — i.e. the distance the run travels when
-    /// the island opens. The band the pill occupies is `currentCollapsedHeight`
-    /// tall and sits directly above the page area.
-    static var pillToPageWaveOffset: CGFloat {
-        -(expandedPageSize.height / 2 + currentCollapsedHeight / 2)
+        currentCollapsedHeight + expandedRowSpacing + expandedPageSize.height / 2
     }
 
     /// The same for the fullscreen stage: the panel's page sits near the top of
     /// the screen, the fullscreen run in its middle.
     static func pageToFullscreenWaveOffset(screenSize: CGSize) -> CGFloat {
-        let pageCentreFromTop = islandTopGap + currentCollapsedHeight + expandedPageSize.height / 2
-        return pageCentreFromTop - screenSize.height / 2
+        (islandTopGap + pageWaveCentreY) - screenSize.height / 2
     }
 
     /// The same idea one step up: how small the fullscreen run starts so it
     /// grows out of the island page's.
     static func pageToFullscreenWaveScale(screenSize: CGSize) -> CGFloat {
+        min(1, spectrumPageWaveGeometry.waveHeight / fullscreenWaveHeight(screenSize: screenSize))
+    }
+
+    /// Where the *pill's* wave sits on the screen, for the way back out.
+    ///
+    /// Escape takes the takeover straight home to the pill rather than back to
+    /// the island's page: the island is collapsing at the same time, so aiming
+    /// the run at a page that is busy disappearing left it landing on nothing.
+    static func pillToFullscreenWaveOffset(screenSize: CGSize) -> CGFloat {
+        (islandTopGap + pillWaveCentreY) - screenSize.height / 2
+    }
+
+    static func pillToFullscreenWaveScale(screenSize: CGSize) -> CGFloat {
+        let pill = pillSpectrumGeometry(forWidth: UserSettings.shared.pillSpectrumWidth)
+        return min(1, pill.waveHeight / fullscreenWaveHeight(screenSize: screenSize))
+    }
+
+    /// The run's height once it fills the screen. Shared by both ends above so
+    /// they can only ever disagree about where the wave is going, never about
+    /// how big it is when it gets there.
+    private static func fullscreenWaveHeight(screenSize: CGSize) -> CGFloat {
         let full = stageWaveGeometry(in: CGSize(width: screenSize.width - stageInset * 4,
                                                 height: screenSize.height - stageInset * 4))
-        guard full.waveHeight > 0 else { return 1 }
-        return min(1, spectrumPageWaveGeometry.waveHeight / full.waveHeight)
+        return full.waveHeight > 0 ? full.waveHeight : 1
     }
 
     /// The collapsed height currently in effect. Views without a
@@ -520,9 +558,6 @@ enum NotchLayout {
     /// How far above the URL field's vertical centre the dodged pill sits —
     /// the AX frame hugs the text, the visible container reads higher.
     static let safariDodgeRaise: CGFloat = 8
-    /// Fallback offset right of screen centre when the URL field couldn't be
-    /// resolved via AX — far enough to clear a centred unified toolbar field.
-    static let safariDodgeFallbackOffset: CGFloat = 300
     /// Minimum clearance the dodged pill keeps from the screen's right edge.
     static let safariDodgeEdgeMargin: CGFloat = 16
 
@@ -570,6 +605,18 @@ enum NotchLayout {
     /// collapsed pill (not the expand/collapse walk). A small, lively spring —
     /// damping low enough for a visible snap, like the iPhone's island pills.
     static let islandMorphAnimation: Animation = .spring(response: 0.40, dampingFraction: 0.74)
+
+    /// The page ⇄ fullscreen leg of the spectrum morph.
+    ///
+    /// Its own spring because it is not the same journey as the other two. The
+    /// pill⇄page morph grows the run by roughly 4× inside the island; this one
+    /// takes it from the island to the whole screen — several times the
+    /// distance and the scale, driven at `islandMorphAnimation`'s 0.40 response
+    /// it read as a snap rather than a takeover. Longer response for the
+    /// distance, and damped nearly flat: at page size a little overshoot is a
+    /// bit of life, at screen size the same proportional overshoot is a wobble
+    /// across the whole display.
+    static let spectrumFullscreenMorphAnimation: Animation = .spring(response: 0.58, dampingFraction: 0.88)
 
     /// Silhouette morph (frame + corner radius) for each *collapse* stage. A
     /// bounce-free `.smooth` spring: collapsing reads as a calm, silky settling,

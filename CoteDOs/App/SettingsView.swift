@@ -147,10 +147,11 @@ private struct NowPlayingSettings: View {
                     .disabled(!settings.spectrumStyle.usesAccentPair || settings.spectrumColorSource == .cover)
                 ColorPicker(String(localized: "settings.spectrum.colorB", defaultValue: "Akzentfarbe 2"), selection: $settings.spectrumColorB, supportsOpacity: false)
                     .disabled(!settings.spectrumStyle.usesAccentPair || settings.spectrumColorSource == .cover)
+                Toggle(String(localized: "settings.spectrum.screensaver", defaultValue: "Als Bildschirmschoner bei Untätigkeit"), isOn: $settings.spectrumScreensaverEnabled)
             } header: {
                 Text(String(localized: "settings.spectrum.header", defaultValue: "Sound-Spektrum"))
             } footer: {
-                Text(String(localized: "settings.spectrum.hint", defaultValue: "„Nur Spektrum“ ersetzt das Mini-Cover in der eingeklappten Notch durch ein breiteres Spektrum mit mehr Balken — der Musik-Tab behält sein Cover. „Vom Cover“ leitet die zweite Farbe automatisch aus dem Album-Akzent ab."))
+                Text(String(localized: "settings.spectrum.hint", defaultValue: "„Nur Spektrum“ ersetzt das Mini-Cover in der eingeklappten Notch durch ein breiteres Spektrum mit mehr Balken — der Musik-Tab behält sein Cover. „Vom Cover“ leitet die zweite Farbe automatisch aus dem Album-Akzent ab. Der Bildschirmschoner übernimmt den Bildschirm, kurz bevor der Mac das Display abschaltet — nur wenn gerade Ton läuft. Er hält den Bildschirm wach; sobald du etwas anfasst oder die Musik aus ist, sperrt der Mac."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

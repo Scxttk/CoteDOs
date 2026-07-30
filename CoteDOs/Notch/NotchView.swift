@@ -18,7 +18,16 @@ struct NotchRootView: View {
     /// takeover is up: it is completely covered by that window and would
     /// otherwise keep redrawing 30 times a second behind it.
     @ObservedObject private var fullscreen = SpectrumFullscreen.shared
+    /// Icon and accent of whichever app is actually making the sound, so a
+    /// Safari video tints the wave with Safari's blue instead of the paused
+    /// player's cover.
+    @ObservedObject private var sourceApp = SourceAppAccent.shared
 
+    /// The colours every wave in this view draws with — one answer, so the
+    /// pill's run and the page's run can't disagree mid-morph.
+    private var waveTints: WaveTints {
+        WaveTints.resolve(nowPlaying: nowPlaying, sourceBundleID: spectrum.sourceBundleID, sourceAppTint: sourceApp.tint)
+    }
 
     /// Run the audio tap whenever the screen is on, regardless of whether
     /// anything is playing — `spectrum.hasSignal` (derived from the tapped
@@ -98,8 +107,12 @@ struct NotchRootView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear { syncSpectrum() }
         .onChange(of: nowPlaying.isPlaying) { _, playing in
-            // When music starts, surface the music tab.
-            if playing { viewModel.selectedTab = .music }
+            // Deliberately does *not* switch to the music tab any more. The
+            // selected tab is remembered across launches now
+            // (`NotchViewModel.selectedTab`), and this fired on the first poll
+            // after launch — so the restored tab was overwritten with Musik
+            // before it was ever seen, and every track change dragged you back
+            // there. Which tab you are on is your choice, not playback's.
             syncSpectrum()
             // If the tap suspended itself after silence, a player flipping to
             // "playing" is the fastest resume signal there is — don't wait
@@ -123,88 +136,110 @@ struct NotchRootView: View {
             && pomodoro.pillText == nil && shelf.items.isEmpty
     }
 
-    /// Whether the travelling wave has anywhere to be right now.
+    /// Whether a live activity (volume/brightness HUD, audio route, battery)
+    /// has taken the collapsed pill over. It replaces the pill's usual content
+    /// and narrows the capsule to its own width — see `islandWidth`.
+    private var activityOwnsPill: Bool {
+        viewModel.islandState == .collapsed && activities.current != nil
+    }
+
+    /// Whether the travelling wave is mounted at all.
     ///
-    /// It follows whichever content owns the island: the pill's own stages, or
-    /// the spectrum page while the island is open on that tab. Everywhere else
-    /// it would be drawing at coordinates that belong to something else — the
-    /// two cases that produced real overlaps being an open island on another
-    /// tab, and the `.band` stage of a collapse, where the island is already
-    /// pill-height but the row still belongs to the tab bar. Both put the run
-    /// straight through the tab titles.
+    /// Deliberately *not* a function of where the island is: while it is active
+    /// this run is the only spectrum in the island, so it stays mounted through
+    /// every state and simply moves. It used to be given up whenever the pages
+    /// mounted, and the spectrum page drew a second, separate wave of its own —
+    /// which meant a handover, and a handover between two independently mounted
+    /// views can only ever be as invisible as the two poses happen to match. It
+    /// wasn't. Now there is nothing to hand over to.
     ///
-    /// Unmounted rather than hidden, so an invisible run cannot keep redrawing
-    /// itself 30 times a second — including underneath the fullscreen takeover,
-    /// which covers the island completely and has a wave of its own.
+    /// The exceptions are the two states where something else owns the pixels.
+    /// The fullscreen takeover covers the island completely and has a wave of
+    /// its own, so this one should not keep redrawing 30 times a second
+    /// underneath it. A live activity takes over the collapsed pill the same
+    /// way the pill hero does — but the hero is *content*, which the activity
+    /// replaces, while this wave is an overlay that no content swap can reach:
+    /// left mounted, it drew straight through the volume HUD's bar.
     private var morphingWaveVisible: Bool {
-        guard morphingWaveActive, !fullscreen.isPresented else { return false }
-        switch viewModel.islandState {
-        case .collapsed, .solo, .condensing:
-            return true
-        case .expanded:
-            // Only for the flight itself. Once the pages are mounted the
-            // spectrum page draws the wave again, because the page lives in the
-            // carousel and therefore *slides* with it: an overlay stays centred
-            // in the island, so it painted itself over whichever page was
-            // sliding past, and left the spectrum page empty on the way out.
-            return viewModel.selectedTab == .spectrum && !viewModel.pagesSettled
-        case .band:
-            // The island is already pill-height here but this row still belongs
-            // to the tab bar; drawing the pill's wave now put it through the
-            // tab titles.
-            return false
-        }
+        morphingWaveActive && !fullscreen.isPresented && !activityOwnsPill
     }
 
-    /// The wave's resting geometry on the page, held at the pill's bar count so
-    /// the hand-over from the travelling overlay to the page's own wave is a
-    /// swap between two identical runs.
-    private var pageWaveBarCount: Int { pillWaveGeometry.barCount }
-
-    /// True once the wave belongs on the page rather than in the pill.
+    /// Whether the wave currently belongs on the spectrum page rather than in
+    /// the pill's band. The travel between the two poses *is* the morph.
     private var waveIsOnPage: Bool {
-        viewModel.islandState == .expanded && viewModel.selectedTab == .spectrum && viewModel.pagesSettled
+        viewModel.islandState == .expanded && viewModel.selectedTab == .spectrum
     }
+
+    /// How far the wave has to slide because the carousel has slid.
+    ///
+    /// This is what the page's own wave used to be for: the spectrum page lives
+    /// in the carousel and moves with it, and an overlay pinned to the island's
+    /// centre painted over whichever page was sliding past. Rather than hand the
+    /// wave over for the duration of a swipe, the run simply travels the same
+    /// distance the page does — one page width per tab of separation, the same
+    /// arithmetic `ExpandedView` applies to the carousel — and the island's own
+    /// clip takes care of hiding it once it is off the edge.
+    private var waveCarouselShift: CGFloat {
+        guard viewModel.islandState == .expanded else { return 0 }
+        let tabs = NotchViewModel.Tab.allCases
+        guard let spectrumIndex = tabs.firstIndex(of: .spectrum),
+              let currentIndex = tabs.firstIndex(of: viewModel.selectedTab) else { return 0 }
+        return CGFloat(spectrumIndex - currentIndex) * NotchLayout.expandedPageSize.width
+    }
+
+    /// The bar count the run holds at every size.
+    ///
+    /// The pill's, everywhere: a count that changed as the wave travelled would
+    /// re-bucket the spectrum on the very frames the eye is following, so the
+    /// morph is purely geometric — the same bars, further apart and taller.
+    private var pageWaveBarCount: Int { pillWaveGeometry.barCount }
 
     private var pillWaveGeometry: NotchLayout.PillSpectrumGeometry {
         NotchLayout.pillSpectrumGeometry(forWidth: settings.pillSpectrumWidth)
     }
 
-    /// The wave's geometry and place, at whichever end it currently belongs to.
-    /// One view, two destinations — the animation between them is the morph.
+    /// The one spectrum in the island, at whichever size and place the current
+    /// state calls for.
+    ///
+    /// Everything about it is a *transform* of a single, never-remounted run:
+    /// the canvas is always built at the page's geometry, and the pill is that
+    /// same run scaled down. Nothing here redraws at a new size — the canvas's
+    /// bar width, spacing and height are draw parameters, not animatable
+    /// attributes, so animating them moves nothing while the bars snap. Scale
+    /// and offset are the interpolation, which is why one view can cover the
+    /// whole journey.
     private var morphingWave: some View {
-        let pill = pillWaveGeometry
-        let wave = waveIsOnPage
-            ? NotchLayout.spectrumPageWaveGeometry(barCount: pill.barCount)
-            : pill
-        let centreY = waveIsOnPage ? NotchLayout.pageWaveCentreY : NotchLayout.pillWaveCentreY
+        let wave = NotchLayout.spectrumPageWaveGeometry(barCount: pageWaveBarCount)
+        let onPage = waveIsOnPage
+        let tints = waveTints
         return LiveWaveBarsView(
             levels: spectrum.bands,
             isLive: spectrum.isLive,
             isActive: nowPlaying.screensAwake,
-            tint: nowPlaying.track != nil ? nowPlaying.artworkColor : nil,
-            secondaryTint: nowPlaying.track != nil ? nowPlaying.artworkSecondaryColor : nil,
-            tertiaryTint: nowPlaying.track != nil ? nowPlaying.artworkTertiaryColor : nil,
-            coverBars: nowPlaying.track != nil ? nowPlaying.coverBars : nil,
+            tint: tints.primary,
+            secondaryTint: tints.secondary,
+            tertiaryTint: tints.tertiary,
+            coverBars: tints.coverBars,
             count: wave.barCount,
             maxHeight: wave.waveHeight,
             barWidth: wave.barWidth,
-            spacing: wave.spacing
+            spacing: wave.spacing,
+            morphScale: onPage ? 1 : NotchLayout.pillToPageWaveScale
         )
+        // Page-sized frame at both ends, even while the run is drawn small
+        // inside it: this is an overlay, so the frame costs no layout, and
+        // `scaleEffect` scales about the frame's centre — so holding the frame
+        // still is what keeps the shrunken run centred on the pill.
         .frame(width: wave.runWidth, height: wave.frameHeight)
-        .offset(y: centreY - wave.frameHeight / 2)
-        .animation(NotchLayout.islandMorphAnimation, value: waveIsOnPage)
+        .offset(
+            x: waveCarouselShift,
+            y: (onPage ? NotchLayout.pageWaveCentreY : NotchLayout.pillWaveCentreY) - wave.frameHeight / 2
+        )
+        .animation(NotchLayout.islandMorphAnimation, value: onPage)
+        // The carousel's own spring, so the run slides in step with the page it
+        // stands in for rather than racing or trailing it.
+        .animation(NotchLayout.tabChangeAnimation, value: waveCarouselShift)
         .allowsHitTesting(false)
-        // Wait for the outgoing tab bar the same way the pill's own content
-        // does (`heroCrossfadeInsertDelay` exists precisely so the wave does
-        // not sit on top of the solo tab's icon and label for a quarter of a
-        // second); leave immediately, so it never lingers over a narrowing
-        // capsule.
-        .transition(.asymmetric(
-            insertion: .opacity.animation(
-                NotchLayout.condenseFadeAnimation.delay(NotchLayout.heroCrossfadeInsertDelay)),
-            removal: .opacity.animation(NotchLayout.condenseFadeAnimation)
-        ))
     }
 
     private var island: some View {
@@ -265,7 +300,11 @@ struct NotchRootView: View {
                     // else can do that: the pill and the page are different
                     // subtrees mounted at different moments, so any wave owned
                     // by either of them has to fade when its owner does.
-                    if morphingWaveVisible { morphingWave }
+                    // Fades rather than cuts: an activity arriving (the volume
+                    // HUD is the common one) rides the island morph, and the
+                    // wave should leave with it instead of blinking out a
+                    // frame early.
+                    if morphingWaveVisible { morphingWave.transition(.opacity) }
                 }
                 .frame(width: islandWidth, height: islandHeight, alignment: .top)
                 .clipShape(shape)
@@ -292,7 +331,15 @@ struct NotchRootView: View {
         // "close Capture while music runs" dilemma, because the collapse
         // target depends on the pill content, not on the tab.
         let heroContent = hasAudioHero || pomodoro.pillText != nil
-        let pillHero = heroContent && (state == .solo || state == .condensing)
+        // `.band` is included, not just `.solo`/`.condensing`: at that stage the
+        // island has already shrunk to pill height while the tab bar is still
+        // showing *every* tab and its label — so the hero (the wave) and those
+        // labels occupied the same band and drew straight through each other on
+        // every collapse. With the hero standing in from `.band` on, the tab bar
+        // is gone by the time the island is pill-sized. On the way up it means
+        // the chrome appears only once the island is actually open, which is the
+        // order `chromeRevealed` already wanted.
+        let pillHero = heroContent && (state == .band || state == .solo || state == .condensing)
         let showsExpanded = state != .collapsed && !pillHero
         // Hero content → the tab bar and the pill hero are *different* content,
         // so cross-dissolve them. Otherwise the condensed icon and the pill
@@ -308,7 +355,7 @@ struct NotchRootView: View {
                 // tabs, then labels), so nothing ever re-appears. By the time
                 // it unmounts only the selected icon is left — pixel-identical
                 // to the pill icon replacing it (idle case).
-                ExpandedView(viewModel: viewModel, nowPlaying: nowPlaying, shelf: shelf, pomodoro: pomodoro, capture: capture, spectrum: spectrum, claudeUsage: claudeUsage, claudeDriver: claudeDriver, spectrumWaveDrawnByOverlay: morphingWaveVisible, spectrumWaveBarCount: morphingWaveActive ? pageWaveBarCount : nil)
+                ExpandedView(viewModel: viewModel, nowPlaying: nowPlaying, shelf: shelf, pomodoro: pomodoro, capture: capture, spectrum: spectrum, claudeUsage: claudeUsage, claudeDriver: claudeDriver, spectrumWaveDrawnByOverlay: morphingWaveActive, spectrumWaveBarCount: morphingWaveActive ? pageWaveBarCount : nil)
                     .transition(handover)
             }
             if state == .collapsed || pillHero {
@@ -464,6 +511,16 @@ private struct ExpandedView: View {
     /// Bar count the page's wave must hold so that taking over from the
     /// travelling one is invisible. nil → the page resolves its own.
     var spectrumWaveBarCount: Int?
+    /// Icon and accent of whichever app is making the sound, so the spectrum
+    /// page is coloured by the audio it is actually drawing.
+    @ObservedObject private var sourceApp = SourceAppAccent.shared
+
+    /// The colours the spectrum page's wave draws with — the same answer the
+    /// pill and the travelling overlay resolve, so the morph doesn't change
+    /// colour halfway through. See `WaveTints`.
+    private var waveTints: WaveTints {
+        WaveTints.resolve(nowPlaying: nowPlaying, sourceBundleID: spectrum.sourceBundleID, sourceAppTint: sourceApp.tint)
+    }
 
     private var pageIndex: Int {
         NotchViewModel.Tab.allCases.firstIndex(of: viewModel.selectedTab) ?? 0
@@ -523,9 +580,10 @@ private struct ExpandedView: View {
                     HStack(spacing: 0) {
                         page(.music, in: geo.size) { NowPlayingView(nowPlaying: nowPlaying, spectrum: spectrum) }
                         page(.spectrum, in: geo.size) {
-                            // The whole page is the wave. Colours follow the
-                            // playing track when there is one; system audio
-                            // with no scriptable track just gets the default.
+                            // The whole page is the wave. Colours follow
+                            // whichever app is making the sound — the track's
+                            // cover when that's the player, the source app's
+                            // icon accent otherwise.
                             //
                             // Unless the wave is the one travelling in from the
                             // pill, in which case it is drawn above this page
@@ -534,18 +592,29 @@ private struct ExpandedView: View {
                             if spectrumWaveDrawnByOverlay {
                                 Color.clear
                             } else {
+                            let tints = waveTints
                             SpectrumStageView(
                                 levels: spectrum.bands,
                                 isLive: spectrum.isLive,
                                 isActive: nowPlaying.screensAwake,
-                                tint: nowPlaying.track != nil ? nowPlaying.artworkColor : nil,
-                                secondaryTint: nowPlaying.track != nil ? nowPlaying.artworkSecondaryColor : nil,
-                                tertiaryTint: nowPlaying.track != nil ? nowPlaying.artworkTertiaryColor : nil,
-                                coverBars: nowPlaying.track != nil ? nowPlaying.coverBars : nil,
+                                tint: tints.primary,
+                                secondaryTint: tints.secondary,
+                                tertiaryTint: tints.tertiary,
+                                coverBars: tints.coverBars,
                                 fixedBarCount: spectrumWaveBarCount
                             )
                             }
                         }
+                        // Click the page to hand the wave the whole screen;
+                        // Escape brings it back (see
+                        // `SpectrumFullscreenController.installKeyMonitor`). The
+                        // swipe-down/swipe-up pair still works — this is the
+                        // same step on the same axis, reachable without a
+                        // trackpad gesture. `contentShape` because the page is
+                        // mostly empty space, and while the overlay owns the
+                        // wave it is literally `Color.clear`.
+                        .contentShape(Rectangle())
+                        .onTapGesture { SpectrumFullscreen.shared.present() }
                         page(.files, in: geo.size) { ShelfView(shelf: shelf) }
                         page(.capture, in: geo.size) { CaptureView(capture: capture, viewModel: viewModel) }
                         page(.timer, in: geo.size) { PomodoroView(pomodoro: pomodoro) }
@@ -736,64 +805,22 @@ private struct CollapsedView: View {
     /// hold, or the capsule clips against its own silhouette.
     var waveDrawnByOverlay: Bool = false
 
-    /// Cached icon for `spectrum.sourceBundleID`, resolved once per bundle ID
-    /// change rather than on every wave-bar redraw.
-    @State private var sourceAppIcon: NSImage?
-    @State private var sourceAppIconBundleID: String?
-    /// Accent derived from `sourceAppIcon`, the same way a track's cover tints
-    /// its wave — so generic system audio (Safari, …) doesn't fall back to a
-    /// flat white wave next to a colourful app icon.
-    @State private var sourceAppTint: Color?
+    /// Icon and accent of whichever app is making the sound. Resolved centrally
+    /// (once per bundle-ID change, not per wave-bar redraw) so the pill, the
+    /// spectrum page and the fullscreen takeover all read the same answer.
+    @ObservedObject private var sourceApp = SourceAppAccent.shared
 
-
-    /// The accent to tint the wave with: the real track's accent when we're
-    /// actually showing that track's cover, else the source app icon's accent
-    /// (Safari's blue, …) for generic system audio, else `nil` (→ white) when
-    /// neither is available.
-    private var waveTint: Color? {
-        if showsTrackArtwork { return nowPlaying.artworkColor }
-        return sourceAppTint
-    }
-
-    /// Whether the hero shows the current track's cover rather than the audio
-    /// source app's icon.
-    ///
-    /// Not simply `isPlaying`: pausing drops that flag at once while
-    /// `spectrum.hasSignal` holds the pill open for another couple of seconds,
-    /// and swapping the cover out for the player's own app icon in that window
-    /// showed Spotify's logo beside flat bars for no reason. So a paused track
-    /// keeps its cover — unless some *other* app is the one making noise
-    /// (Safari playing a video while Spotify sits paused), which is exactly the
-    /// case the app-icon branch exists for.
-    private var showsTrackArtwork: Bool {
-        guard nowPlaying.track?.artworkURL != nil else { return false }
-        if nowPlaying.isPlaying { return true }
-        guard let sourceBundleID = spectrum.sourceBundleID else { return true }
-        return sourceBundleID == nowPlaying.activeSourceID.bundleID
-    }
-
-    private func refreshSourceAppIcon(for bundleID: String?) {
-        guard bundleID != sourceAppIconBundleID else { return }
-        sourceAppIconBundleID = bundleID
-        sourceAppTint = nil
-        guard let bundleID,
-              let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
-            sourceAppIcon = nil
-            return
-        }
-        let icon = NSWorkspace.shared.icon(forFile: url.path)
-        sourceAppIcon = icon
-        ArtworkColor.fetch(from: icon, cacheKey: bundleID) { color in
-            guard bundleID == sourceAppIconBundleID else { return }
-            sourceAppTint = color
-        }
+    /// The colours this pill's wave and thumbnail draw with. See `WaveTints`.
+    private var tints: WaveTints {
+        WaveTints.resolve(nowPlaying: nowPlaying, sourceBundleID: spectrum.sourceBundleID, sourceAppTint: sourceApp.tint)
     }
 
     var body: some View {
+        let tints = self.tints
         // Spacings/paddings here must stay in lock-step with the width estimate
         // in `NotchViewModel.collapsedWidth`, or the pill clips against the
         // silhouette — so both sides read from the same `NotchLayout` constants.
-        HStack(spacing: NotchLayout.collapsedItemSpacing) {
+        return HStack(spacing: NotchLayout.collapsedItemSpacing) {
             if hasAudioHero {
                 if settings.pillSpectrumOnly {
                     // Spectrum-only mode: no thumbnail at all (neither cover
@@ -819,10 +846,10 @@ private struct CollapsedView: View {
                             levels: spectrum.bands,
                             isLive: spectrum.isLive,
                             isActive: nowPlaying.screensAwake,
-                            tint: waveTint,
-                            secondaryTint: showsTrackArtwork ? nowPlaying.artworkSecondaryColor : nil,
-                            tertiaryTint: showsTrackArtwork ? nowPlaying.artworkTertiaryColor : nil,
-                            coverBars: showsTrackArtwork ? nowPlaying.coverBars : nil,
+                            tint: tints.primary,
+                            secondaryTint: tints.secondary,
+                            tertiaryTint: tints.tertiary,
+                            coverBars: tints.coverBars,
                             count: wave.barCount,
                             maxHeight: wave.waveHeight,
                             barWidth: wave.barWidth,
@@ -831,7 +858,7 @@ private struct CollapsedView: View {
                         .frame(width: wave.runWidth, height: wave.frameHeight)
                         .transition(.opacity.combined(with: .scale(scale: 0.85)))
                     }
-                } else if showsTrackArtwork, let url = nowPlaying.track?.artworkURL {
+                } else if tints.fromCover, let url = nowPlaying.track?.artworkURL {
                     // Fade the new cover in (transaction animation) over a placeholder
                     // tinted to the track's accent colour rather than flat grey, so a
                     // track change doesn't flash a grey square then pop during the
@@ -855,8 +882,8 @@ private struct CollapsedView: View {
                     // them further and read as an extra border), else fall back
                     // to a plain glyph on a tinted background.
                     Group {
-                        if let sourceAppIcon {
-                            Image(nsImage: sourceAppIcon).resizable().scaledToFit()
+                        if let icon = sourceApp.icon {
+                            Image(nsImage: icon).resizable().scaledToFit()
                         } else {
                             RoundedRectangle(cornerRadius: NotchLayout.collapsedArtworkCornerRadius)
                                 .fill(Color.white.opacity(0.1))
@@ -873,10 +900,10 @@ private struct CollapsedView: View {
                         levels: spectrum.bands,
                         isLive: spectrum.isLive,
                         isActive: nowPlaying.screensAwake,
-                        tint: waveTint,
-                        secondaryTint: showsTrackArtwork ? nowPlaying.artworkSecondaryColor : nil,
-                        tertiaryTint: showsTrackArtwork ? nowPlaying.artworkTertiaryColor : nil,
-                        coverBars: showsTrackArtwork ? nowPlaying.coverBars : nil,
+                        tint: tints.primary,
+                        secondaryTint: tints.secondary,
+                        tertiaryTint: tints.tertiary,
+                        coverBars: tints.coverBars,
                         count: NotchLayout.collapsedWaveBarCount,
                         maxHeight: NotchLayout.collapsedWaveMaxHeight,
                         barWidth: NotchLayout.collapsedWaveBarWidth,
@@ -916,11 +943,6 @@ private struct CollapsedView: View {
         // expand/collapse walk's explicit withAnimation calls.
         .animation(NotchLayout.islandMorphAnimation, value: settings.pillSpectrumOnly)
         .animation(NotchLayout.islandMorphAnimation, value: settings.pillSpectrumWidth)
-        // Resolved at the pill level (not inside the thumbnail branch) so the
-        // source-app tint keeps refreshing in spectrum-only mode, where no
-        // icon is on screen but the wave still wants the app's accent.
-        .onAppear { refreshSourceAppIcon(for: spectrum.sourceBundleID) }
-        .onChange(of: spectrum.sourceBundleID) { _, bundleID in refreshSourceAppIcon(for: bundleID) }
     }
 
     /// The passive focus-timer readout. Sizes must stay in lock-step with the

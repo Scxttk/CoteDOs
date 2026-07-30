@@ -39,6 +39,11 @@ struct SpectrumStageView: View {
     /// reliably animate its own arrival: a state change made while the view is
     /// still being installed is folded into the insertion and does not animate.
     var landed: Bool = true
+    /// The spring the arrival rides. Defaults to the island's own morph, which
+    /// is right for a run travelling inside it; the fullscreen takeover passes
+    /// `NotchLayout.spectrumFullscreenMorphAnimation` because it covers several
+    /// times the distance and needs longer to do it.
+    var morphAnimation: Animation = NotchLayout.islandMorphAnimation
 
     private var origin: WaveMorphOrigin { landed ? .identity : (morphOrigin ?? .identity) }
 
@@ -56,12 +61,13 @@ struct SpectrumStageView: View {
                 maxHeight: stage.waveHeight,
                 barWidth: stage.barWidth,
                 spacing: stage.spacing,
-                morphScale: origin.scale
+                morphScale: origin.scale,
+                morphAnimation: morphAnimation
             )
             .frame(width: geo.size.width, height: geo.size.height)
         }
         .offset(y: origin.offsetY)
-        .animation(NotchLayout.islandMorphAnimation, value: origin)
+        .animation(morphAnimation, value: origin)
     }
 }
 

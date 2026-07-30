@@ -118,4 +118,47 @@ final class ArtworkColorTests: XCTestCase {
         let d = abs(secondaryHue - hue)
         XCTAssertGreaterThanOrEqual(min(d, 1 - d), 1.0 / 6.0, "the secondary must be a different colour family")
     }
+
+    // MARK: App icons
+
+    /// The shape an app icon actually has: a rounded mark on a transparent
+    /// canvas, with roughly the margin macOS bakes into every icon.
+    ///
+    /// The regression: `sample` renders premultiplied, so that margin arrives
+    /// as (0,0,0,0) — pure black. It used to be counted as a *neutral* pixel
+    /// and left in the denominator, which both diluted the mark's share and
+    /// inflated `neutralShare` until the neutral contest handed back grey.
+    func testTransparentMarginDoesNotDiluteAnIconsColour() throws {
+        let data = try pngCover { ctx in
+            ctx.clear(CGRect(x: 0, y: 0, width: 64, height: 64))
+            // ~44% of the square, matching a real icon's proportions: below the
+            // 10% dominance bar once the empty canvas is counted against it.
+            ctx.setFillColor(CGColor(red: 0.1, green: 0.45, blue: 0.9, alpha: 1))
+            ctx.fill(CGRect(x: 10, y: 10, width: 43, height: 43))
+        }
+        let accents = try XCTUnwrap(ArtworkColor.accents(from: data))
+        let (hue, saturation, _) = try hsb(accents.primary)
+        XCTAssertEqual(hue, 0.58, accuracy: 0.06, "the mark's blue must survive its transparent margin")
+        XCTAssertGreaterThanOrEqual(saturation, 0.30, "a vivid icon must not come back washed out")
+    }
+
+    /// Safari is the case that started this: the only audio source with no
+    /// scriptable track that Scott actually uses. Guards the whole chain the
+    /// pill's tint depends on — icon lookup, PNG conversion, extraction — with
+    /// the real icon rather than a synthetic stand-in.
+    func testSafarisIconYieldsItsBlue() throws {
+        let url = try XCTUnwrap(
+            NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Safari"),
+            "Safari must be installed for this test to mean anything")
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        let tiff = try XCTUnwrap(icon.tiffRepresentation)
+        let rep = try XCTUnwrap(NSBitmapImageRep(data: tiff))
+        let data = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
+
+        let accents = try XCTUnwrap(ArtworkColor.accents(from: data))
+        let (hue, saturation, brightness) = try hsb(accents.primary)
+        XCTAssertEqual(hue, 0.60, accuracy: 0.07, "Safari's rim is blue (got hue \(hue))")
+        XCTAssertGreaterThanOrEqual(saturation, 0.30, "the blue must not be neutralised into grey")
+        XCTAssertGreaterThanOrEqual(brightness, 0.40)
+    }
 }

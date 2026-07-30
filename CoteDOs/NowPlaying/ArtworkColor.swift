@@ -354,7 +354,7 @@ enum ArtworkColor {
     /// artwork, strongest first. nil only when the image couldn't be
     /// read/decoded at all.
     private static func hueBuckets(from data: Data) -> HueAnalysis? {
-        guard let (bitmap, width, height) = sample(data, side: 32) else { return nil }
+        guard let (bitmap, _, _) = sample(data, side: 32) else { return nil }
 
         let bucketCount = 24
         var bucketWeight = [CGFloat](repeating: 0, count: bucketCount)
@@ -364,9 +364,25 @@ enum ArtworkColor {
         var bucketPixelCount = [Int](repeating: 0, count: bucketCount)
         var neutralPixelCount = 0
         var neutralLumaSum: CGFloat = 0
-        let totalPixelCount = width * height
+        // Counts only the pixels that actually carry an image. Covers are
+        // opaque, so for them this ends up as `width * height` and nothing
+        // changes — but an *app icon* (see the `NSImage` overload of `fetch`)
+        // is a rounded shape on a transparent canvas, and roughly 45% of its
+        // square is margin. `sample` renders premultiplied, so that margin
+        // arrives as (0,0,0,0): pure black, which failed the `v > 0.05` guard
+        // below and was counted as a *neutral* pixel with luma 0. That both
+        // diluted every hue's share against a denominator it had no chance of
+        // filling and inflated `neutralShare` past the neutral contest's
+        // threshold — Apple Music's icon came out grey and Chrome's washed
+        // out, purely from the empty corners of the canvas.
+        var opaquePixelCount = 0
 
         for i in stride(from: 0, to: bitmap.count, by: 4) {
+            // Kept high rather than at 0.5: above it the premultiplied colour
+            // is within a couple of percent of the true one, so the antialiased
+            // rim never has to be un-premultiplied to be read correctly.
+            guard CGFloat(bitmap[i + 3]) / 255 > 0.9 else { continue }
+            opaquePixelCount += 1
             let r = CGFloat(bitmap[i]) / 255
             let g = CGFloat(bitmap[i + 1]) / 255
             let b = CGFloat(bitmap[i + 2]) / 255
@@ -402,18 +418,19 @@ enum ArtworkColor {
             bucketPixelCount[bucket] += 1
         }
 
+        guard opaquePixelCount > 0 else { return nil }
         let buckets = bucketWeight.indices
             .filter { bucketWeight[$0] > 0 }
             .sorted { bucketWeight[$0] > bucketWeight[$1] }
             .map { i in
                 HueBucket(
                     rgb: (bucketR[i] / bucketWeight[i], bucketG[i] / bucketWeight[i], bucketB[i] / bucketWeight[i]),
-                    share: Double(bucketPixelCount[i]) / Double(totalPixelCount)
+                    share: Double(bucketPixelCount[i]) / Double(opaquePixelCount)
                 )
             }
         return HueAnalysis(
             buckets: buckets,
-            neutralShare: Double(neutralPixelCount) / Double(totalPixelCount),
+            neutralShare: Double(neutralPixelCount) / Double(opaquePixelCount),
             neutralLuma: neutralPixelCount > 0 ? neutralLumaSum / CGFloat(neutralPixelCount) : 1
         )
     }

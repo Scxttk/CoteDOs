@@ -330,6 +330,8 @@ struct LiveWaveBarsView: View {
     var spacing: CGFloat = 3
     /// See `WaveBarsView.morphScale`.
     var morphScale: CGFloat = 1
+    /// See `WaveBarsView.morphAnimation`.
+    var morphAnimation: Animation = NotchLayout.islandMorphAnimation
 
     var body: some View {
         WaveBarsView(
@@ -343,7 +345,8 @@ struct LiveWaveBarsView: View {
             maxHeight: maxHeight,
             barWidth: barWidth,
             spacing: spacing,
-            morphScale: morphScale
+            morphScale: morphScale,
+            morphAnimation: morphAnimation
         )
     }
 }
@@ -635,6 +638,10 @@ struct WaveBarsView: View {
     /// wave appears and the spring carries it home. 1 means no morph is running,
     /// which is every wave that isn't mid-transition.
     var morphScale: CGFloat = 1
+    /// The spring `morphScale` rides. Must be whatever the caller animates the
+    /// run's *offset* with, or the wave arrives at its destination before (or
+    /// after) it finishes growing — the two halves of one movement.
+    var morphAnimation: Animation = NotchLayout.islandMorphAnimation
     @ObservedObject private var settings = UserSettings.shared
     /// Decides whether the bars ease between updates — see the `body` comment.
     @ObservedObject private var power = PowerSource.shared
@@ -799,7 +806,7 @@ struct WaveBarsView: View {
                 // cannot be restarted by the levels' ease, which is what kept
                 // the morph from ever being visible.
                 .scaleEffect(morphScale)
-                .animation(NotchLayout.islandMorphAnimation, value: morphScale)
+                .animation(morphAnimation, value: morphScale)
         } else {
             // Hoisted out of the timeline closure on purpose: the colours don't
             // depend on the clock, so they're resolved once per update instead

@@ -1,11 +1,17 @@
 import AppKit
 import ApplicationServices
 
-/// Detects Safari running fullscreen on some display — the one situation where
-/// the centred pill sits right on top of the browser's search/URL bar (the
-/// menu bar is gone, so the toolbar moves up under the notch). The pill can't
-/// stay there: it is dodged to the right of the URL field and made
-/// click-through for the duration (see `NotchWindowController`).
+/// Detects Safari showing its search/URL bar under the notch on some display —
+/// the one situation where the centred pill sits right on top of it (in
+/// fullscreen the menu bar is gone, so the toolbar moves up under the notch).
+/// The pill can't stay there: it is dodged to the right of the URL field and
+/// made click-through for the duration (see `NotchWindowController`).
+///
+/// The trigger is the *visible URL field*, not fullscreen as such. A window
+/// that reports fullscreen without a toolbar on screen — a video put fullscreen
+/// from the page (`f` on YouTube/Twitch), or a toolbar Safari has auto-hidden —
+/// has nothing for the pill to collide with, so it stays centred and
+/// interactive.
 ///
 /// Modeled on `MenuBarOverlapMonitor`: reads the frontmost app through the
 /// Accessibility API, reusing the permission already granted for the
@@ -16,16 +22,14 @@ import ApplicationServices
 /// heuristic would have).
 final class SafariFullscreenMonitor {
 
-    /// Safari is fullscreen on `screen`; `urlFieldFrame` is the frame of its
-    /// address/search field in `NSScreen.frame` coordinates (Cocoa,
-    /// origin bottom-left), or nil when the toolbar couldn't be resolved
-    /// (dodge to a generic fallback then). The full frame — not just the
-    /// right edge — because the dodged pill aligns vertically with the
-    /// field's centre, nestling beside the toolbar instead of hugging the
-    /// screen's top edge above it.
+    /// Safari is fullscreen on `screen` with its address/search field visible;
+    /// `urlFieldFrame` is that field in `NSScreen.frame` coordinates (Cocoa,
+    /// origin bottom-left). The full frame — not just the right edge — because
+    /// the dodged pill aligns vertically with the field's centre, nestling
+    /// beside the toolbar instead of hugging the screen's top edge above it.
     struct DodgeState: Equatable {
         let screen: NSScreen
-        let urlFieldFrame: NSRect?
+        let urlFieldFrame: NSRect
 
         static func == (lhs: DodgeState, rhs: DodgeState) -> Bool {
             lhs.screen === rhs.screen && lhs.urlFieldFrame == rhs.urlFieldFrame
@@ -39,6 +43,7 @@ final class SafariFullscreenMonitor {
     private var activationObserver: NSObjectProtocol?
     private var spaceObserver: NSObjectProtocol?
     private var pollTimer: Timer?
+    private var pollInterval: TimeInterval = 0
     private(set) var current: DodgeState?
 
     private static let safariBundleID = "com.apple.Safari"
@@ -49,10 +54,20 @@ final class SafariFullscreenMonitor {
     /// half the old rate; the dodge doesn't need sub-second latency for the
     /// cases no notification covers.
     private static let pollInterval: TimeInterval = 2.0
+    /// The rate while Safari is frontmost *and* fullscreen. Putting a video
+    /// fullscreen from the page hides the toolbar without an app switch or a
+    /// Space change, so only the poll notices — and two seconds of the pill
+    /// sitting off to the side is very visible. The cost of the faster rate is
+    /// paid in the one state where it shows.
+    private static let fullscreenPollInterval: TimeInterval = 0.5
     /// How deep below the toolbar to search for the URL text field. Safari
     /// nests the field a few groups down; the cap keeps a changed hierarchy
     /// from turning into a full-tree walk.
     private static let toolbarSearchDepth = 8
+
+    /// Set by the last `computeDodgeState()`: Safari frontmost with a
+    /// fullscreen focused window, dodged or not. Drives the poll rate.
+    private var sawSafariFullscreen = false
 
     func start() {
         let center = NSWorkspace.shared.notificationCenter
@@ -64,10 +79,17 @@ final class SafariFullscreenMonitor {
         spaceObserver = center.addObserver(
             forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in self?.evaluate() }
-        pollTimer = Timer.scheduledTimer(withTimeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
+        schedulePoll(interval: Self.pollInterval)
+        evaluate()
+    }
+
+    private func schedulePoll(interval: TimeInterval) {
+        guard pollInterval != interval || pollTimer == nil else { return }
+        pollInterval = interval
+        pollTimer?.invalidate()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             self?.evaluate()
         }
-        evaluate()
     }
 
     func stop() {
@@ -78,12 +100,14 @@ final class SafariFullscreenMonitor {
         spaceObserver = nil
         pollTimer?.invalidate()
         pollTimer = nil
+        pollInterval = 0
     }
 
     deinit { stop() }
 
     private func evaluate() {
         let state = computeDodgeState()
+        schedulePoll(interval: sawSafariFullscreen ? Self.fullscreenPollInterval : Self.pollInterval)
         guard state != current else { return }
         current = state
         onChange?(state)
@@ -117,22 +141,31 @@ final class SafariFullscreenMonitor {
 
     // MARK: Positioning
 
-    /// Where the dodged pill's centre belongs: just right of the URL field
-    /// (or a generic offset right of centre when AX couldn't resolve it),
+    /// Where the dodged pill's centre belongs: just right of the URL field,
     /// clamped so the pill keeps clear of the screen's right edge.
-    static func dodgePillCenterX(urlFieldMaxX: CGFloat?, screenFrame: NSRect, pillWidth: CGFloat, gap: CGFloat = NotchLayout.safariDodgeGap) -> CGFloat {
-        let centerX: CGFloat
-        if let urlFieldMaxX {
-            centerX = urlFieldMaxX + gap + pillWidth / 2
-        } else {
-            centerX = screenFrame.midX + NotchLayout.safariDodgeFallbackOffset
-        }
+    static func dodgePillCenterX(urlFieldMaxX: CGFloat, screenFrame: NSRect, pillWidth: CGFloat, gap: CGFloat = NotchLayout.safariDodgeGap) -> CGFloat {
+        let centerX = urlFieldMaxX + gap + pillWidth / 2
         return min(centerX, screenFrame.maxX - NotchLayout.safariDodgeEdgeMargin - pillWidth / 2)
+    }
+
+    /// Is the field AX reported actually on screen and worth dodging?
+    ///
+    /// A hidden toolbar isn't always absent from the AX tree — Safari can park
+    /// it above the top edge instead, where its frame reads as a sliver poking
+    /// past `maxY`. Anything empty, off this display, or above the top edge is
+    /// not something the pill can collide with.
+    static func isURLFieldVisible(_ field: NSRect, on screenFrame: NSRect) -> Bool {
+        guard field.width > 0, field.height > 0 else { return false }
+        guard screenFrame.intersects(field) else { return false }
+        return field.maxY <= screenFrame.maxY
     }
 
     // MARK: AX plumbing
 
     private func computeDodgeState() -> DodgeState? {
+        // Cleared up front so every early exit below leaves the poll at the
+        // idle rate; only the fullscreen guard sets it.
+        sawSafariFullscreen = false
         guard let app = NSWorkspace.shared.frontmostApplication,
               app.bundleIdentifier == Self.safariBundleID
         else { return nil }
@@ -157,6 +190,7 @@ final class SafariFullscreenMonitor {
             dlog("safari frontmost, not fullscreen")
             return nil
         }
+        sawSafariFullscreen = true
 
         guard let windowFrame = frame(of: window) else {
             dlog("window frame unreadable")
@@ -168,22 +202,35 @@ final class SafariFullscreenMonitor {
         }
         dlog("fullscreen on screen \(screen.frame)")
 
-        var urlFieldFrame: NSRect?
-        if let field = urlField(in: window),
-           let fieldFrame = frame(of: field),
-           let primary = NSScreen.screens.first {
-            // AX X coordinates share the axis with `NSScreen.frame`; Y is
-            // flipped (AX origin top-left of the primary screen, Y down).
-            // Rounded so per-poll sub-pixel jitter doesn't churn the dodge
-            // state every second.
-            urlFieldFrame = NSRect(
-                x: fieldFrame.origin.x.rounded(),
-                y: (primary.frame.maxY - fieldFrame.maxY).rounded(),
-                width: fieldFrame.width.rounded(),
-                height: fieldFrame.height.rounded()
-            )
+        // No visible URL field, no dodge. A video put fullscreen from the page
+        // reports the window as fullscreen while the toolbar is gone — there
+        // the pill belongs where it always is, centred and interactive.
+        guard let field = urlField(in: window) else {
+            dlog("no url field in the window, staying centred")
+            return nil
         }
-        dlog(urlFieldFrame.map { "url field \($0)" } ?? "url field not found, fallback position")
+        guard !boolAttribute(of: field, kAXHiddenAttribute) else {
+            dlog("url field hidden, staying centred")
+            return nil
+        }
+        guard let fieldFrame = frame(of: field), let primary = NSScreen.screens.first else {
+            dlog("url field frame unreadable, staying centred")
+            return nil
+        }
+        // AX X coordinates share the axis with `NSScreen.frame`; Y is flipped
+        // (AX origin top-left of the primary screen, Y down). Rounded so
+        // per-poll sub-pixel jitter doesn't churn the dodge state every tick.
+        let urlFieldFrame = NSRect(
+            x: fieldFrame.origin.x.rounded(),
+            y: (primary.frame.maxY - fieldFrame.maxY).rounded(),
+            width: fieldFrame.width.rounded(),
+            height: fieldFrame.height.rounded()
+        )
+        guard Self.isURLFieldVisible(urlFieldFrame, on: screen.frame) else {
+            dlog("url field \(urlFieldFrame) not visible on \(screen.frame), staying centred")
+            return nil
+        }
+        dlog("url field \(urlFieldFrame)")
         return DodgeState(screen: screen, urlFieldFrame: urlFieldFrame)
     }
 
@@ -218,6 +265,14 @@ final class SafariFullscreenMonitor {
               let children = value as? [AXUIElement]
         else { return [] }
         return children
+    }
+
+    /// A missing or oddly-typed attribute reads as false — same fail-open
+    /// stance as the rest of the AX plumbing.
+    private func boolAttribute(of element: AXUIElement, _ attribute: String) -> Bool {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return false }
+        return (value as? Bool) ?? false
     }
 
     private func role(of element: AXUIElement) -> String? {

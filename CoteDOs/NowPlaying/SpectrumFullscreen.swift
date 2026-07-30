@@ -18,11 +18,21 @@ final class SpectrumFullscreen: ObservableObject {
     /// still on screen, the wave is animating out. Kept separate from
     /// `isPresented` so the closing animation has somewhere to live.
     @Published private(set) var isCollapsing = false
+    /// Whether this takeover is *guarding* the Mac rather than just being
+    /// looked at: armed, anything that ends it locks the machine behind it
+    /// (see `IdleSpectrumMonitor`). Set by the two ways of leaving a Mac
+    /// deliberately — the idle screensaver and the ⌥⌘S hotkey — and never by
+    /// the tap on the spectrum page, which happens while you sit in front of it.
+    ///
+    /// Not `@Published`: it is read alongside `isPresented`, whose change is
+    /// what anyone acting on this waits for anyway.
+    private(set) var isArmed = false
 
     private init() {}
 
-    func present() {
+    func present(armed: Bool = false) {
         guard !isPresented else { return }
+        isArmed = armed
         isCollapsing = false
         isPresented = true
     }
@@ -38,9 +48,10 @@ final class SpectrumFullscreen: ObservableObject {
     func finishDismissal() {
         isPresented = false
         isCollapsing = false
+        isArmed = false
     }
 
-    func toggle() {
-        isPresented ? dismiss() : present()
+    func toggle(armed: Bool = false) {
+        isPresented ? dismiss() : present(armed: armed)
     }
 }

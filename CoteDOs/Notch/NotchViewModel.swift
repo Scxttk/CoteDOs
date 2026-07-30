@@ -2,7 +2,10 @@ import Combine
 import SwiftUI
 
 final class NotchViewModel: ObservableObject {
-    enum Tab: CaseIterable {
+    /// Raw values are the case names and are persisted (see `selectedTab`), so
+    /// renaming a case silently forgets which tab the user was on — add a new
+    /// case rather than renaming one.
+    enum Tab: String, CaseIterable {
         case music
         case spectrum
         case files
@@ -23,8 +26,12 @@ final class NotchViewModel: ObservableObject {
 
         var icon: String {
             switch self {
-            case .music:   return "waveform"   // the app's own identity, not a note
-            case .spectrum: return "chart.bar.fill"
+            // The waveform belongs to the spectrum — it is a picture of what
+            // that tab actually draws. It sat on Musik back when the wave was
+            // the app's whole identity and there was no spectrum tab to own it;
+            // with one, Musik reads better as a plain note.
+            case .music:   return "radio.fill"
+            case .spectrum: return "waveform"
             case .files:   return "tray.full"
             case .capture: return "square.and.pencil"
             case .timer:   return "timer"
@@ -79,34 +86,17 @@ final class NotchViewModel: ObservableObject {
     @Published var pagesSettled = false {
         didSet {
             guard pagesSettled != oldValue else { return }
-            guard pagesSettled else { spectrumWaveLanded = false; return }
-            // One runloop tick after the pages mount, so the spectrum page's
-            // wave draws its first frame back up at the pill's size and place
-            // and *then* travels down into the panel.
-            //
-            // This lives on the view model rather than in the page's own
-            // `onAppear` for a reason that cost two attempts to find: a state
-            // change made while a view is still being installed is folded into
-            // its insertion and animates not at all, so a wave that drove its
-            // own morph never moved however long the spring was.
-            DispatchQueue.main.async { [weak self] in
+            guard pagesSettled else { return }
+            // The tab bar is the last thing to arrive: the island opens, the
+            // wave travels into place, and only then does the chrome fade up
+            // around it. Showing all three at once made the wave read as
+            // arriving *behind* an interface that was already there.
+            DispatchQueue.main.asyncAfter(deadline: .now() + NotchLayout.chromeRevealDelay) { [weak self] in
                 guard let self, self.pagesSettled else { return }
-                withAnimation(NotchLayout.islandMorphAnimation) { self.spectrumWaveLanded = true }
-                // The tab bar is the last thing to arrive: the island opens, the
-                // wave travels into place, and only then does the chrome fade
-                // up around it. Showing all three at once made the wave read as
-                // arriving *behind* an interface that was already there.
-                DispatchQueue.main.asyncAfter(deadline: .now() + NotchLayout.chromeRevealDelay) { [weak self] in
-                    guard let self, self.pagesSettled else { return }
-                    withAnimation(NotchLayout.contentInsertAnimation) { self.chromeRevealed = true }
-                }
+                withAnimation(NotchLayout.contentInsertAnimation) { self.chromeRevealed = true }
             }
         }
     }
-
-    /// False while the spectrum page's wave is still "in flight" from the pill.
-    /// Drives the pill⇄page morph — see `SpectrumStageView.morphOrigin`.
-    @Published private(set) var spectrumWaveLanded = false
 
     /// False until the wave has landed, so the tab bar enters last.
     @Published private(set) var chromeRevealed = false
@@ -128,7 +118,27 @@ final class NotchViewModel: ObservableObject {
     /// only actually hovering the pill should.
     var occupiesExpandedFootprint: Bool { islandState != .collapsed }
 
-    @Published var selectedTab: Tab = .music
+    /// The tab the island is on, remembered across launches — it used to reset
+    /// to Musik every start regardless of where you left it.
+    @Published var selectedTab: Tab = NotchViewModel.restoredTab {
+        didSet {
+            guard selectedTab != oldValue else { return }
+            UserDefaults.standard.set(selectedTab.rawValue, forKey: Self.selectedTabKey)
+        }
+    }
+
+    private static let selectedTabKey = "selectedTab"
+
+    /// The last tab, if it is still one the user offers. Falls back to the
+    /// first enabled tab rather than to `.music`, which may itself be switched
+    /// off in Settings.
+    private static var restoredTab: Tab {
+        let fallback = enabledTabs.first ?? .music
+        guard let raw = UserDefaults.standard.string(forKey: selectedTabKey),
+              let tab = Tab(rawValue: raw),
+              UserSettings.shared.isTabEnabled(tab) else { return fallback }
+        return tab
+    }
 
     /// The tabs actually offered — each tab can be switched off in Settings.
     /// Used by the tab bar and the swipe pager; the carousel itself keeps all
@@ -159,7 +169,22 @@ final class NotchViewModel: ObservableObject {
 
     /// While true (e.g. the capture field is focused) the island won't auto-
     /// collapse when the cursor leaves it — otherwise typing would dismiss it.
+    /// Granted only a short grace period, because nothing un-focuses that field
+    /// on its own; see `NotchWindowController.evaluateHover`.
     @Published var isInteractionLocked: Bool = false
+
+    /// Whether the open island should stay open regardless of the cursor, with
+    /// no grace period at all.
+    ///
+    /// True on the spectrum page, which is the one tab that exists to be *left
+    /// running and looked at* — a visualiser that closes two seconds after you
+    /// move the mouse away is not a visualiser. Unlike `isInteractionLocked`
+    /// this needs no timer to release it: it falls false on its own the moment
+    /// you switch tabs or close the island, so it cannot get stuck open the way
+    /// a focused text field could.
+    var holdsIslandOpen: Bool {
+        islandState == .expanded && selectedTab == .spectrum
+    }
 
     /// Bumped to ask the capture field to take focus (e.g. via the global hotkey).
     @Published var captureFocusToken: Int = 0
