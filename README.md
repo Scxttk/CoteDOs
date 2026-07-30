@@ -145,13 +145,7 @@ Audio is analysed in-process and never written anywhere. Captured notes are file
 
 Grab the zip from the [latest release](../../releases/latest), unzip, drag `CoteDOs.app` into `/Applications`. The file name skips the accents; the app calls itself Côte d'OS. Its bundle identifier and data folders still carry the app's older names underneath, so your settings and shelf survive a rename — plumbing, not facade.
 
-Gatekeeper will block the first launch, since it's ad-hoc signed and I'm not paying Apple 99 €/year to notarize a menu-bar toy. Either:
-
-```sh
-xattr -d com.apple.quarantine /Applications/CoteDOs.app
-```
-
-or let it fail once, then *System Settings → Privacy & Security → Open Anyway*.
+From 1.5.0 the app is signed with a Developer ID and notarized, so it opens on a double-click — no Gatekeeper detour, no `xattr` incantation. Releases up to 1.4.0 were ad-hoc signed and still need one.
 
 It adds itself as a login item on first launch. Updating from a release called `Ledge.app` or `NotchMate.app`? Delete the old one first — your settings survive, but macOS will ask for the permissions again, because a grant follows the code signature rather than the bundle identifier.
 

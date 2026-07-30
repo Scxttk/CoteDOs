@@ -265,7 +265,7 @@
 				// which notarization rejects, and macOS treats every rebuild of one as a
 				// different app, so each update costs the audio-capture grant. Debug keeps
 				// the development identity; only shipping builds need this one.
-				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 7;
