@@ -38,7 +38,7 @@ final class NotchViewModel: ObservableObject {
     }
 
     /// The island's visual state. Collapsing is staged (iPhone-style):
-    /// - `.band`  — capsule holding all three tab groups (icon + label).
+    /// - `.band`  — capsule holding every tab group (icon + label).
     /// - `.solo`  — only the selected tab group remains (icon + label), the
     ///   others having faded out as the capsule narrows onto it.
     /// - `.condensing` — the label drops too; just the selected icon is left,
@@ -108,8 +108,9 @@ final class NotchViewModel: ObservableObject {
     /// only actually hovering the pill should.
     var occupiesExpandedFootprint: Bool { islandState != .collapsed }
 
-    /// The tab the island is on, remembered across launches — it used to reset
-    /// to Musik every start regardless of where you left it.
+    /// The tab the island is on, remembered across launches. Which tab you are on
+    /// is your choice, not playback's — see the `isPlaying` handler in
+    /// `NotchRootView`, which deliberately does not touch this.
     @Published var selectedTab: Tab = NotchViewModel.restoredTab {
         didSet {
             guard selectedTab != oldValue else { return }

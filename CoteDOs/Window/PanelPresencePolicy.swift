@@ -2,12 +2,12 @@ import Foundation
 
 /// Single source of truth for the panel's visibility and interactivity.
 ///
-/// Historically `panel.alphaValue` and `panel.ignoresMouseEvents` were written
-/// ad hoc from several places (menu-bar overlap, click-through gating, the
-/// capture hotkey), and every new reason to hide or mute the panel multiplied
-/// the ways those writes could stomp each other — the restore path of one
-/// feature would blindly undo another's hide. All reasons now live here as
-/// sets, and the two panel properties are derived, never assigned piecemeal.
+/// `panel.alphaValue` and `panel.ignoresMouseEvents` are derived here and
+/// assigned nowhere else. Writing them ad hoc from each feature that has a reason
+/// to hide or mute the panel — menu-bar overlap, click-through gating, the
+/// capture hotkey — means every new reason multiplies the ways those writes stomp
+/// each other, and one feature's restore path blindly undoes another's hide.
+/// Reasons live here as sets instead.
 ///
 /// - A *hide* reason makes the panel fully invisible **and** click-through;
 ///   whenever any hide reason is present, `ignoresMouseEvents` is

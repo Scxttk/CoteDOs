@@ -5,10 +5,10 @@ import SwiftUI
 /// Surfaces system volume changes as an in-notch HUD activity (reusing the
 /// live-activity engine). Gated by `UserSettings.hudEnabled`.
 ///
-/// Volume uses public CoreAudio APIs and works reliably. Brightness observation
-/// requires the private `DisplayServices` framework on modern macOS and is
-/// intentionally left out rather than shipping fragile private-API code; the
-/// HUD is structured so a brightness provider can be added later.
+/// Volume uses public CoreAudio APIs and works reliably. Brightness needs the
+/// private `DisplayServices` framework (`BrightnessController`), so it is wired in
+/// only when those symbols resolve — when they don't, the brightness keys pass
+/// straight through to macOS and the HUD simply never shows for them.
 ///
 /// When `UserSettings.suppressSystemOSD` is on, Côte d'OS captures the hardware
 /// volume keys (`MediaKeyTap`, needs Accessibility), adjusts the volume itself and

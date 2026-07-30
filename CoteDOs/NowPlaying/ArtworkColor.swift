@@ -604,10 +604,9 @@ enum ArtworkColor {
     ///    it. Top and bottom half vote separately, which is where the bar's
     ///    faint gradient comes from.
     ///
-    /// The election is the point. Averaging a slice first — what this used to
-    /// do — invents colours the sleeve doesn't contain (red lettering on white
-    /// averages to pink) and washes out exactly the covers with the most
-    /// character.
+    /// The election is the point. Averaging a slice first invents colours the
+    /// sleeve doesn't contain — red lettering on white averages to pink — and it
+    /// washes out exactly the covers with the most character.
     private static func barPalette(from data: Data, tuning: CoverBarTuning) -> CoverBarPalette? {
         guard let (bitmap, width, height) = sample(data, side: barSampleSide),
               width > 2, height > 3

@@ -56,8 +56,8 @@ final class UserSettings: ObservableObject {
     }
 
     /// Visual style for the now-playing spectrum bars (`WaveBarsView`).
-    /// `.solid` keeps every bar tinted the same (cover accent or the cyan/blue
-    /// fallback); `.alternating` and `.gradient` bring in a second accent
+    /// `.solid` keeps every bar tinted the same (cover accent, or white when
+    /// there is no cover); `.alternating` and `.gradient` bring in a second accent
     /// colour, sourced per `spectrumColorSource`.
     enum SpectrumStyle: String, CaseIterable, Identifiable {
         case solid

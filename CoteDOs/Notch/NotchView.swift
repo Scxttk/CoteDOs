@@ -128,7 +128,7 @@ struct NotchRootView: View {
     /// Only when the pill is *nothing but* the wave: with a timer readout or a
     /// shelf badge beside it the run is no longer centred in the capsule, and
     /// an overlay would have to re-derive an offset the `HStack` already owns.
-    /// Those cases keep the old crossfade, which is correct if less pretty.
+    /// Those cases keep the plain crossfade, which is correct if less pretty.
     private var morphingWaveActive: Bool {
         settings.pillSpectrumOnly && hasAudioHero
             && pomodoro.pillText == nil && shelf.items.isEmpty
@@ -145,11 +145,10 @@ struct NotchRootView: View {
     ///
     /// Deliberately *not* a function of where the island is: while it is active
     /// this run is the only spectrum in the island, so it stays mounted through
-    /// every state and simply moves. It used to be given up whenever the pages
-    /// mounted, and the spectrum page drew a second, separate wave of its own —
-    /// which meant a handover, and a handover between two independently mounted
-    /// views can only ever be as invisible as the two poses happen to match. It
-    /// wasn't. Now there is nothing to hand over to.
+    /// every state and simply moves. Giving it up when the pages mount means the
+    /// spectrum page needs a second wave of its own, and that means a handover —
+    /// which can only ever be as invisible as the two independently mounted views'
+    /// poses happen to match. They don't. So there is nothing to hand over to.
     ///
     /// The exceptions are the two states where something else owns the pixels.
     /// The fullscreen takeover covers the island completely and has a wave of
@@ -170,10 +169,10 @@ struct NotchRootView: View {
 
     /// How far the wave has to slide because the carousel has slid.
     ///
-    /// This is what the page's own wave used to be for: the spectrum page lives
-    /// in the carousel and moves with it, and an overlay pinned to the island's
-    /// centre painted over whichever page was sliding past. Rather than hand the
-    /// wave over for the duration of a swipe, the run simply travels the same
+    /// The spectrum page lives in the carousel and moves with it, so an overlay
+    /// pinned to the island's centre would paint over whichever page is sliding
+    /// past. Rather than hand the wave over for the duration of a swipe, the run
+    /// travels the same
     /// distance the page does — one page width per tab of separation, the same
     /// arithmetic `ExpandedView` applies to the carousel — and the island's own
     /// clip takes care of hiding it once it is off the edge.
@@ -392,11 +391,10 @@ private extension AnyTransition {
     /// are near-pixel-identical by construction (same glyph, same size, same
     /// centre — and the swap fires only once the condensed icon has settled,
     /// see `condenseSwapDelay`), so a one-frame swap is invisible. Any
-    /// overlap-based scheme is *not*: the earlier hold-opaque handover drew
-    /// both copies at once for ~0.1 s, and with sub-point offsets between the
-    /// two view trees the union read as the glyph bolding up and thinning
-    /// back — a visible end-of-collapse blink (measured on recorded frames:
-    /// white pixel energy doubled for ~4 frames).
+    /// overlap-based scheme is *not*: holding both copies opaque for ~0.1 s means
+    /// sub-point offsets between the two view trees make the union read as the
+    /// glyph bolding up and thinning back — a visible end-of-collapse blink, and
+    /// measurable on recorded frames as white pixel energy doubling for ~4 frames.
     static var iconHandover: AnyTransition { .identity }
 
     /// Cross-dissolve used when music plays and the tab bar hands off to the
@@ -539,7 +537,7 @@ private struct ExpandedView: View {
             // the hero flight between them is purely horizontal, not diagonal.
             NotchTabBar(
                 selection: $viewModel.selectedTab,
-                // .band/.expanded keep all three tabs; .solo/.condensing keep
+                // .band/.expanded keep every tab; .solo/.condensing keep
                 // only the selected one. Labels survive until .condensing, where
                 // the text drops and just the icon remains.
                 showsAllTabs: viewModel.islandState == .expanded || viewModel.islandState == .band,
@@ -567,7 +565,7 @@ private struct ExpandedView: View {
             .opacity(viewModel.chromeRevealed || viewModel.islandState == .solo
                      || viewModel.islandState == .condensing || viewModel.islandState == .collapsed ? 1 : 0)
 
-            // All three pages live in a carousel that slides as one strip. Unlike
+            // The pages live in a carousel that slides as one strip. Unlike
             // insertion/removal transitions this can't get the direction wrong on
             // quick back-and-forth swipes — the offset is a pure function of the
             // selected index.

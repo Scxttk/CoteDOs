@@ -76,7 +76,8 @@ final class WaveBarsSnapshotTests: XCTestCase {
     }
 
     /// The spectrum-only pill at its two ends: Apple's 6-bar default and the
-    /// slider's 32-bar maximum. The 6-bar case is where the wave used to read
+    /// widest setting, which lands on 19 chunky bars rather than 32 hairlines
+    /// (`CollapsedGeometryTests.testWidestSettingMatchesTheSpectrumPage` pins that). The 6-bar case is where the wave used to read
     /// as a flat block — 32 bands folded onto 6 bars by pure max, a 0.45
     /// envelope floor and an oversized glow between them levelled the run —
     /// so this frame exists to judge exactly that: the edge bars should duck

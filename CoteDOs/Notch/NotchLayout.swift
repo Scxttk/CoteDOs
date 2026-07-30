@@ -1,10 +1,12 @@
 import SwiftUI
 
 /// Central source of truth for the island's geometry, animation and timing
-/// constants. Previously these were scattered as magic numbers across
-/// `NotchViewModel`, `NotchWindowController`, `IslandShape` and the views.
-/// Keeping them in one place makes the island tunable and is the foundation
-/// for user-configurable appearance.
+/// constants. Every magic number belongs here rather than inline in
+/// `NotchViewModel`, `NotchWindowController`, `IslandShape` or the views — most
+/// of them are tuned against each other, and a value that lives next to its one
+/// call site gets retuned without the others.
+///
+/// Put new ones here too.
 enum NotchLayout {
 
     // MARK: Visible island dimensions
@@ -276,9 +278,9 @@ enum NotchLayout {
     /// on the very frames the eye is following. Keeping the count fixed makes
     /// the morph purely geometric: the same bars, further apart and taller.
     static func spectrumPageWaveGeometry(barCount: Int) -> PillSpectrumGeometry {
-        // Straight through to the one implementation the page itself uses, so
-        // the travelling overlay and the page's own run cannot drift apart —
-        // this used to re-derive the geometry with a different rule, and did.
+        // Straight through to the one implementation the page itself uses, so the
+        // travelling overlay and the page's own run cannot drift apart. Deriving
+        // it separately here looks harmless and drifts.
         stageWaveGeometry(in: expandedPageSize, barCount: barCount)
     }
 
@@ -376,8 +378,11 @@ enum NotchLayout {
     static let expandedWidth: CGFloat = 460
     static let expandedHeight: CGFloat = 212
 
-    /// Width of the `.band` stage: a capsule holding all four icon+label tabs
-    /// (~335pt natural) with breathing room to the rounded ends.
+    /// Width of the `.band` stage: a capsule holding every icon+label tab with
+    /// breathing room to the rounded ends. Five tabs come to ~472 pt natural, so
+    /// the row is scaled down to fit (see `tabBarFitScale`) rather than the
+    /// capsule being widened to hold it — 380 is tuned against the pill, not
+    /// against the label count, and it has to stay that way.
     static let bandWidth: CGFloat = 380
     /// `.solo` stage width is per selected tab (`NotchViewModel.soloWidth`);
     /// these size the estimate — a fixed base (icon + spacings + button and end
@@ -409,12 +414,13 @@ enum NotchLayout {
     /// How much the whole tab row has to be scaled down to stay inside the
     /// island, or 1 when it already fits.
     ///
-    /// Six tabs with German labels come to roughly 550 pt against 428 pt of
-    /// island, and an over-wide `HStack` does not wrap or truncate — it overflows
-    /// its centre, so the outer labels ran past the capsule and read as floating
-    /// outside it. Scaling the row (rather than shrinking fonts and paddings
-    /// individually) is what keeps the *solo* metrics untouched, and those are
-    /// tuned to the point of pixel-identity with the pill's glyph.
+    /// Five tabs with German labels come to roughly 472 pt against the 348 pt
+    /// the band capsule actually offers (`tabBarAvailableWidth`), and an
+    /// over-wide `HStack` does not wrap or truncate — it overflows its centre, so
+    /// the outer labels run past the capsule and read as floating outside it.
+    /// Scaling the row (rather than shrinking fonts and paddings individually) is
+    /// what keeps the *solo* metrics untouched, and those are tuned to the point
+    /// of pixel-identity with the pill's glyph.
     static func tabBarFitScale(titles: [String]) -> CGFloat {
         guard !titles.isEmpty else { return 1 }
         let natural = titles.reduce(CGFloat(0)) { $0 + tabItemWidthEstimate(labelCharacters: $1.count) }
@@ -530,8 +536,8 @@ enum NotchLayout {
     static let islandStrokeBottomOpacity: Double = 0.02
     static let islandStrokeWidth: CGFloat = 1
 
-    /// Drop shadow under the floating island (a touch stronger than before,
-    /// since the detached island relies on it to read as elevated).
+    /// Drop shadow under the floating island. A detached island has nothing else
+    /// to read as elevated, so this carries more weight than a docked one's would.
     static let islandShadowOpacityExpanded: Double = 0.55
     static let islandShadowOpacityCollapsed: Double = 0.35
     static let islandShadowRadius: CGFloat = 14

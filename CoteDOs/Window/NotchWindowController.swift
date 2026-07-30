@@ -816,7 +816,7 @@ final class NotchWindowController {
     }
 
     /// Move the tab selection one step, clamped to the ends (no wrap-around).
-    /// `next` advances toward `.capture`; `!next` toward `.music`.
+    /// `next` advances toward the last enabled tab; `!next` toward the first.
     private func pageTab(next: Bool) {
         let tabs = NotchViewModel.enabledTabs
         guard let index = tabs.firstIndex(of: viewModel.selectedTab) else { return }

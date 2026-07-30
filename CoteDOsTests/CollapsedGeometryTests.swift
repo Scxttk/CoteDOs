@@ -140,9 +140,10 @@ final class CollapsedGeometryTests: XCTestCase {
 
     // MARK: Tab bar fit
 
-    /// Six tabs' labels overflowed the island and read as sitting outside it —
-    /// an `HStack` neither wraps nor truncates, it just overflows its centre.
-    /// Whatever the enabled set is, the row has to end up inside the island.
+    /// Five tabs' labels come to ~472 pt against the 348 pt the band capsule
+    /// offers, and an `HStack` neither wraps nor truncates — it overflows its
+    /// centre, so the outer labels sit outside the island. Whatever the enabled
+    /// set is, the row has to end up inside it.
     func testTabRowFitsInsideTheIslandAtEveryTabCount() {
         let titles = NotchViewModel.Tab.allCases.map(\.title)
         for count in 1...titles.count {

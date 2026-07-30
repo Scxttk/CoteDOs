@@ -3,9 +3,10 @@ import Combine
 import SwiftUI
 
 /// Aggregates the available media sources into one observable now-playing state.
-/// Picks the active source automatically (or per user preference), replaces the
-/// old 1-second AppleScript polling with notification-driven refreshes plus
-/// local position interpolation.
+/// Picks the active source automatically (or per user preference), and keeps the
+/// AppleScript traffic down to a hard refresh every 5 s plus the players' own
+/// change notifications — the position in between is interpolated locally, once a
+/// second, so a moving progress bar costs no IPC at all.
 final class NowPlayingManager: ObservableObject {
     @Published private(set) var isRunning = false
     @Published private(set) var isPlaying = false
@@ -18,7 +19,7 @@ final class NowPlayingManager: ObservableObject {
     @Published private(set) var activeSourceID: UserSettings.MediaSource = .spotify
 
     /// Accent colour derived from the current cover, tinting the wave visualizer.
-    /// nil when there's no artwork (e.g. Apple Music) — the wave falls back to blue.
+    /// nil when there's no artwork (e.g. Apple Music) — the wave then draws white.
     @Published private(set) var artworkColor: Color?
     /// The cover's second and third colour families, when it really has them —
     /// feed the gradient/alternating spectrum styles in "Vom Cover" mode. nil
@@ -217,7 +218,7 @@ final class NowPlayingManager: ObservableObject {
     #endif
 
     /// Recompute the wave tint only when the cover changes; clear it when there's
-    /// no artwork so the visualizer reverts to its default blue.
+    /// no artwork so the visualizer falls back to white.
     private func refreshArtworkColor(for url: URL?) {
         guard url != artworkColorURL else { return }
         artworkColorURL = url

@@ -235,8 +235,8 @@ struct NowPlayingView: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    /// Audio-output selector (replaces the old shuffle + favourite buttons):
-    /// pick which device the sound plays through, current one checked.
+    /// Audio-output selector: pick which device the sound plays through,
+    /// current one checked.
     private var outputPicker: some View {
         Menu {
             ForEach(output.devices) { device in
@@ -305,7 +305,7 @@ private struct ControlButton: View {
 }
 
 /// `WaveBarsView` fed from the live tap. It exists as a view of its own so the
-/// band updates — 15 a second — invalidate the bars and nothing else: the
+/// band updates — 30 a second — invalidate the bars and nothing else: the
 /// levels live on their own observable (`SpectrumBands`), and this is the only
 /// place that observes it. Wrap the wave in this instead of reading
 /// `spectrum.bands.values` from a parent, or the parent starts re-rendering at
@@ -356,8 +356,7 @@ struct LiveWaveBarsView: View {
 /// only colour work left in the draw path is the tip whitening — and `HSB`
 /// does that as arithmetic, with no trip through NSColor/ColorSync.
 private struct BarInk {
-    /// The bar's body colour, byte-for-byte what the old per-frame path
-    /// produced for this style.
+    /// The bar's body colour for this style.
     let base: Color
     let baseHSB: HSB
     /// What the bar's top-to-bottom gradient ends on.
@@ -370,9 +369,9 @@ private struct BarInk {
     /// Dynamic Island travels from S 0.59 / B 0.60 at its tip to S 0.32 /
     /// B 0.64 at its base (measured off screenshots of the now-playing
     /// island): the colour *drains* toward the foot and lifts a touch in
-    /// brightness, rather than darkening. Ours used to do the opposite —
-    /// full colour at the tip, 72% brightness at the base — which is what
-    /// made the bars read as standing on the black instead of sunk into it.
+    /// brightness, rather than darkening. Push it the other way — full colour at
+    /// the tip, 72% brightness at the base — and the bars read as standing on the
+    /// black instead of sunk into it.
     static let footSaturation = 0.55   // 0.32 / 0.59
     static let footBrightness = 1.07   // 0.64 / 0.60
 
@@ -441,13 +440,12 @@ private struct BarLevels: VectorArithmetic {
 /// The wave's *dimensions* as one interpolatable quantity, so a change of size
 /// morphs instead of cutting.
 ///
-/// These used to be plain `let`s on `WaveCanvas`, which meant only the bar
-/// heights could animate — the run's thickness, gaps and vertical range
-/// changed in a single frame. That was invisible while every wave had a fixed
-/// size, and became the thing standing between the pill and the spectrum page
-/// once both derived their geometry from one rule: the two are the same wave at
-/// two scales, so growing from one into the other is a pure interpolation of
-/// this struct.
+/// Animatable, so the run's thickness, gaps and vertical range interpolate
+/// rather than jumping in a single frame. Plain `let`s on `WaveCanvas` are enough
+/// while every wave has a fixed size, and stop being enough the moment the pill
+/// and the spectrum page derive their geometry from one rule: they are the same
+/// wave at two scales, so growing from one into the other is a pure
+/// interpolation of this struct.
 private struct WaveMetrics: VectorArithmetic {
     var barWidth: CGFloat
     var spacing: CGFloat
@@ -482,14 +480,14 @@ private struct WaveMetrics: VectorArithmetic {
 
 /// The whole wave, drawn in a single pass.
 ///
-/// This used to be an `HStack` of `Capsule` views — one SwiftUI view per bar,
-/// 32 of them in the pill. That is what made the wave expensive, and it was
-/// never the pixels: a thumbnail-sized strip of rounded rects cost ~52% of a
-/// core, because every animated frame re-evaluated and re-laid-out 32 views'
-/// worth of view graph, 60 times a second. Behind a `Canvas` there is no
-/// per-bar identity and no layout — one closure, `count` rounded rects — so a
-/// frame costs about what it looks like it should, and the bars can keep
-/// easing between spectrum updates on battery as well as on wall power.
+/// A `Canvas`, not an `HStack` of 32 `Capsule`s, and the reason is measured: the
+/// view-per-bar version cost ~52% of a core for a thumbnail-sized strip of
+/// rounded rects. Never the pixels — every animated frame re-evaluated and
+/// re-laid-out 32 views' worth of view graph, 60 times a second. Behind a
+/// `Canvas` there is no per-bar identity and no layout (one closure, `count`
+/// rounded rects), so a frame costs about what it looks like it should, and the
+/// bars can keep easing between spectrum updates on battery as well as on wall
+/// power.
 private struct WaveCanvas: View, Animatable {
     /// Per-bar magnitude (0…1). Interpolated by SwiftUI; drives height, glow
     /// intensity and the white-hot tip alike.
@@ -582,11 +580,11 @@ private struct WaveCanvas: View, Animatable {
         // pure black island this halo is what makes the wave read as alive
         // rather than printed on.
         //
-        // The bar's *colour* no longer changes with the level. A peaking bar
-        // used to drive its tip up to 60% toward white ("incandescence"); the
-        // Dynamic Island doesn't do that — its bars hold their colour and only
-        // their height and glow move — and side by side the white tips were
-        // the last thing that still read as un-Apple.
+        // A bar's *colour* does not change with its level. Driving a peaking
+        // tip 60% toward white ("incandescence") is the obvious thing to try and
+        // it is wrong: the Dynamic Island's bars hold their colour and only their
+        // height and glow move, and side by side the white tips were the last
+        // thing here that still read as un-Apple.
         var layer = context
         // Glow radius scales with the bar's own width: a fixed 1–4.5 pt halo
         // was sized for 3 pt panel bars and swallowed the 2 pt pill bars whole,
@@ -614,7 +612,8 @@ private struct WaveCanvas: View, Animatable {
 /// Frequency bars for the now-playing wave. When `bands` carries real spectrum
 /// data (from `SpectrumAnalyzer`) the bars reflect the song's actual frequencies;
 /// otherwise they fall back to a procedural animation. Tinted to the cover's
-/// accent colour when one is available, else the default blue.
+/// accent colour when one is available, else white — the same answer
+/// `ArtworkColor` gives for a sleeve with no real colour in it.
 struct WaveBarsView: View {
     var isActive: Bool
     var tint: Color?
@@ -646,11 +645,10 @@ struct WaveBarsView: View {
     /// Decides whether the bars ease between updates — see the `body` comment.
     @ObservedObject private var power = PowerSource.shared
 
-    /// Per-bar fill, top-to-bottom gradient as before, but the *base* colour
-    /// now depends on the chosen spectrum style: same for every bar (`.solid`,
-    /// unchanged behaviour), alternating between the two accent colours, or
-    /// interpolated across the bar's position for a continuous left-to-right
-    /// gradient look.
+    /// Per-bar fill: a top-to-bottom gradient whose *base* colour comes from the
+    /// chosen spectrum style — the same for every bar (`.solid`), alternating
+    /// between the two accent colours, or interpolated across the bar's position
+    /// for a continuous left-to-right ramp.
     /// The two accents used by `.alternating`/`.gradient`. `.cover` derives them
     /// from the current track's accent (same source the `.solid` tint uses) so
     /// the spectrum keeps matching whatever is playing; `.manual` uses the
@@ -680,13 +678,13 @@ struct WaveBarsView: View {
     }
 
     // iOS's Dynamic Island wave bars are flat, fully-opaque colour top to
-    // bottom — no fade. Ours used to fade each bar down to 55% opacity, which
-    // (combined with how thin these bars are) made the colour nearly
-    // impossible to actually see. Now one solid colour per bar.
-    /// The whole run's colours. Built once per update: the old code derived
-    /// each bar's colour inside the draw call, which meant four ColorSync
-    /// round-trips per bar per frame — ~2900/s for the 32-bar pill at 30 fps,
-    /// and the single biggest item in a `sample` of the idling app.
+    // bottom — no fade. One solid colour per bar here too: fading each down to
+    // 55% opacity, at how thin these bars are, makes the colour nearly
+    // impossible to see at all.
+    /// The whole run's colours, built once per update rather than inside the draw
+    /// call. Per-bar-per-frame costs four ColorSync round-trips — ~2900/s for the
+    /// 32-bar pill at 30 fps, and the single biggest item in a `sample` of the
+    /// idling app.
     private func palette(total: Int) -> [BarInk] {
         // No tint (no artwork, or the cover's dominant-colour extraction found
         // no real hue) — default to white rather than a hardcoded accent,
@@ -706,9 +704,9 @@ struct WaveBarsView: View {
             return Array(repeating: BarInk(accent), count: total)
         case .shades:
             // Full saturation across the whole run, brightness climbing left to
-            // right — a lit VU ramp. The earlier version desaturated the left
-            // bars toward grey (after the iOS reference), which at 16 bars
-            // turned half the wave grey; on a black notch, grey reads as off.
+            // right — a lit VU ramp. Desaturating the left bars toward grey is
+            // what the iOS reference does, and at 16 bars it turns half the wave
+            // grey; on a black notch, grey reads as switched off.
             let lit = HSB(Color.stageVivid(tint ?? .white))
             return (0..<total).map { index in
                 let t = CGFloat(Self.position(of: index, total: total))
@@ -741,10 +739,10 @@ struct WaveBarsView: View {
     }
 
     /// iOS's spectrum bars never fully bottom out — even a silent band keeps a
-    /// visible sliver. Ours read as flatter than that; nudge the hard floor up
-    /// a touch (was 3) so the quietest bar still reads as "there".
-    /// Proportional, with only a hairline clamp (was `max(4, …)`): a 4 pt
-    /// floor on the pill's short bars swallowed 22% of the run's height —
+    /// visible sliver. The hard floor sits a touch above where it reads flat, so
+    /// the quietest bar still reads as "there".
+    /// Proportional, with only a hairline clamp: a flat 4 pt floor on the pill's
+    /// short bars swallows 22% of the run's height —
     /// the stage view's floor is 14% and its extra headroom is exactly what
     /// makes the same data read livelier there.
     private var floorHeight: CGFloat { max(2, maxHeight * 0.14) }
@@ -831,11 +829,10 @@ struct WaveBarsView: View {
     }
 }
 
-// The per-bar shading helpers that used to live here (`whitened`,
-// `brightnessScaled`, `hsbMix`, `multiStop`, `brightnessRamp`) moved onto
-// `HSB`: each of them decomposed its `Color` argument on every call, which is
-// a ColorSync round-trip, and the wave called them per bar per frame. They now
-// operate on components resolved once per palette — see `WaveBarsView.BarInk`.
+// Per-bar shading lives on `HSB`, not on `Color`: a helper taking a `Color`
+// decomposes it on every call, which is a ColorSync round-trip, and the wave
+// would call it per bar per frame. `HSB` operates on components resolved once
+// per palette — see `WaveBarsView.BarInk`.
 private extension Color {
     private var hsb: HSB { HSB(self) }
 
@@ -848,10 +845,10 @@ private extension Color {
     /// through iOS's now-playing pipeline puts the Dynamic Island's bars at
     /// H 0.559 / S 0.59 / B 0.60 at the tip, against an extracted accent of
     /// H 0.563 / S 0.92 / B 0.96 — so Apple picks the *same hue* (1.4° apart)
-    /// and then tones it **down**. This used to push the other way, to
-    /// S 0.95 / B 1.00, which is where the wave's neon look came from.
+    /// and then tones it **down**. Pushing the other way, to S 0.95 / B 1.00, is
+    /// where a neon-looking wave comes from.
     ///
-    /// The ceilings now sit on Apple's measured value. The floors stay, so a
+    /// So the ceilings sit on Apple's measured value. The floors stay, so a
     /// washed-out cover doesn't produce a bar you can't see.
     private static let barSaturation: ClosedRange<CGFloat> = 0.45...0.62
     private static let barBrightness: ClosedRange<CGFloat> = 0.54...0.64

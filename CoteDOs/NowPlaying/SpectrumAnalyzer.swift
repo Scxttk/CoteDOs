@@ -8,10 +8,10 @@ import QuartzCore
 /// The band levels, deliberately split off `SpectrumAnalyzer` into their own
 /// observable object.
 ///
-/// They change 15×/s; every other property the analyzer publishes changes a
+/// They change 30×/s; every other property the analyzer publishes changes a
 /// few times a minute at most. With all of it on one object, a band update
 /// invalidated *every* view that observes the analyzer — which reaches up to
-/// `NotchRootView`, so AppKit re-laid out the entire hosting view 15×/s for a
+/// `NotchRootView`, so AppKit re-laid out the entire hosting view 30×/s for a
 /// wave the size of a thumbnail (`sample` showed `NSHostingView.layout` under
 /// the display cycle as the main thread's biggest item). Views that draw the
 /// bars observe this; views that only need `hasSignal`/`isLive`/`sourceBundleID`
@@ -96,10 +96,10 @@ final class SpectrumAnalyzer: ObservableObject {
     )
 
     // FFT scratch (all preallocated — nothing is allocated on the audio thread).
-    /// 2048 (was 1024): at 32 bands the low end needs the finer bins — with
-    /// 46.9 Hz bins the bottom half-dozen log bands all landed on the same
-    /// two bins and moved as twins. 23.4 Hz bins keep them distinct; the FFT
-    /// itself stays cheap on any Apple-Silicon Mac.
+    /// 2048, because 32 log-spaced bands need bins finer than 46.9 Hz: at that
+    /// width the bottom half-dozen bands all land on the same two bins and move
+    /// as twins. 23.4 Hz keeps them distinct, and the FFT is still cheap on any
+    /// Apple-Silicon Mac.
     private let fftSize = 2_048
     private let log2n: vDSP_Length
     private var fftSetup: FFTSetup?
@@ -111,18 +111,18 @@ final class SpectrumAnalyzer: ObservableObject {
     private var magnitudes: [Float]
     private var smoothed: [Float]          // per-band, with attack/decay
     private var lastPublish = 0.0
-    // The dB window used to be a fixed absolute range (30…52, then 47, then
-    // 40 dB), retuned three times and still wrong: measuring real playback
-    // showed two ordinary tracks can differ in absolute loudness by ~20 dB
-    // (mastering level, not "quiet vs busy" within a song). A fixed window
-    // can't serve both — either it clips a loud track to the ceiling almost
-    // immediately, or a quiet track never clears the floor. So the window
-    // now floats: `loudnessCeilDb` tracks the loudest thing currently
+    // The dB window floats, because no fixed one can work: measuring real
+    // playback showed two ordinary tracks differing by ~20 dB in absolute
+    // loudness (mastering level, not "quiet vs busy" within a song). A fixed
+    // range either clips the loud track to the ceiling within a second or
+    // never lets the quiet one clear the floor. Three attempts at picking a
+    // good fixed range is how long that took to accept.
+    // `loudnessCeilDb` tracks the loudest thing currently
     // playing (fast attack, slow release — like a VU meter's peak hold) and
     // the dB→0…1 mapping always uses a fixed-width slice directly below it,
     // so each track's own dynamic range gets used regardless of its overall
     // loudness.
-    private var loudnessCeilDb: Float = 40   // seeded at the old static ceiling so the first second isn't blank
+    private var loudnessCeilDb: Float = 40   // seeded, not zero, so the first second isn't blank
     private static let loudnessAttack: Float = 0.5        // fraction of the way to a new peak, per callback
     private static let loudnessReleasePerSecond: Float = 6 // dB/s the ceiling falls once the signal quiets down
     private static let loudnessCeilMin: Float = 10          // never let a silent stretch collapse the window
@@ -157,7 +157,7 @@ final class SpectrumAnalyzer: ObservableObject {
     private static let beatWeight: Float = 0.72
 
     // Dormancy: the tap keeps delivering callbacks during silence — most of
-    // the day, for most people — and running a 1024-point FFT ~46× a second
+    // the day, for most people — and running a 2048-point FFT ~46× a second
     // against digital zeroes is exactly the "erhöhter Energieverbrauch"
     // Battery settings pins on the app. A cheap peak scan gates the FFT: after
     // a couple of silent seconds the analysis sleeps and each callback costs
@@ -320,13 +320,13 @@ final class SpectrumAnalyzer: ObservableObject {
     }
 
     /// A failed tap build must *not* kill the analyzer the way `stop()` does.
-    /// It used to: the failure paths called `stop()`, which — once `start()`
-    /// grew the user-level `desired` flag — cleared that flag, so a single
-    /// transient HAL error during a suspend/resume cycle silently disabled
-    /// the spectrum until the next screen wake, and every later probe and
-    /// `pokeResume()` bailed on `guard desired`. (Spotify keeps its output
-    /// stream open while paused, so those cycles happen all day.) Instead:
-    /// clean up whatever half-built objects exist, fall back to the suspended
+    /// `stop()` clears the user-level `desired` flag, so routing a build failure
+    /// through it means one transient HAL error during a suspend/resume cycle
+    /// silently disables the spectrum until the next screen wake — every later
+    /// probe and `pokeResume()` then bails on `guard desired`. Spotify keeps its
+    /// output stream open while paused, so those cycles happen all day.
+    ///
+    /// So: clean up whatever half-built objects exist, fall back to the suspended
     /// state, and let the probe try again.
     private func buildFailed() {
         trace("tap build FAILED — falling back to probing")
@@ -563,14 +563,14 @@ final class SpectrumAnalyzer: ObservableObject {
         // 31 averaged level 0.194 at a 16 kHz ceiling and 0.289 at 12 kHz. The
         // envelope taxes the run's two end bars (see `WaveCanvas.envelope`), so
         // the last bar needs ~0.19 before it leaves the height floor at all —
-        // the old ceiling parked it right on that line while the first bar,
-        // carrying bass at level ~1, cleared it constantly.
+        // a 16 kHz ceiling parks it right on that line, while the first bar,
+        // carrying bass at level ~1, clears it constantly.
         let fMin = 40.0
         let fMax = min(12_000.0, sampleRate / 2)
         let binHz = sampleRate / Double(fftSize)
-        // Snappier than before (was 0.6/0.82) — quicker to jump on a transient
-        // and quicker to fall back between beats, so the bars visibly punch
-        // instead of gliding: more the iPhone's twitchy read, less a slow wave.
+        // Deliberately twitchy: quick onto a transient and quick to fall back
+        // between beats, so the bars punch instead of gliding. Slower constants
+        // (0.6/0.82) read as a wave rather than as the iPhone's nervous meter.
         let attack: Float = 0.78     // how fast bars rise toward a new peak
         let decay: Float = 0.7       // how fast they fall
 
@@ -637,12 +637,15 @@ final class SpectrumAnalyzer: ObservableObject {
 
     /// Blend each band a little with its neighbours (simple 3-tap kernel, edges
     /// replicated) so the published shape reads as one continuous curve instead
-    /// of `bandCount` independent, jumpy bars — with only 6 bands, one loud
-    /// isolated bin next to two quiet ones looked noisy rather than musical.
-    /// (A lighter 15/70/15 variant was tried briefly to bring back more
-    /// between-bar contrast, but that was diagnosed against a tap that had
-    /// Safari/Twitch audio mixed in with Spotify at the same time — revert to
-    /// even 25/50/25 until re-checked against a clean single source.)
+    /// of `bandCount` independent, jumpy bars: one loud isolated bin between two
+    /// quiet ones reads as noise rather than as music, and at small band counts
+    /// that is most of the wave.
+    ///
+    /// The kernel is even — 25/50/25. A lighter 15/70/15 gives back more
+    /// between-bar contrast and is worth another look, but the one time it was
+    /// judged, the tap had Safari and Spotify audio mixed together, so the
+    /// comparison was worthless. Re-check it against a single source before
+    /// changing this.
     /// Applied only at publish time, on a copy: `smoothed` itself keeps its
     /// unblended per-band values for the attack/decay recursion above, so this
     /// can't compound blur into itself frame over frame.

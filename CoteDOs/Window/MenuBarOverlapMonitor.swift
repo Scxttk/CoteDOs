@@ -11,8 +11,8 @@ import ApplicationServices
 /// Reads the frontmost app's menu-bar item frames via the Accessibility API.
 /// This reuses the same Accessibility permission already requested for the
 /// volume-key tap (`MediaKeyTap`) — no separate prompt. If the permission
-/// isn't granted, or reading fails for any reason, this fails open (reports
-/// no overlap), which matches today's behaviour exactly.
+/// isn't granted, or reading fails for any reason, this fails open and reports no
+/// overlap — the pill stays where it is rather than hiding on a guess.
 final class MenuBarOverlapMonitor {
     /// Called on the main thread whenever the overlap state changes.
     var onChange: ((Bool) -> Void)?
