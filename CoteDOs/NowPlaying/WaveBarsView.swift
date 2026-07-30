@@ -205,14 +205,21 @@ struct WaveCanvas: View, Animatable {
     /// pill's widest bar glows at ~6 pt, the page's at ~13 pt.
     private static let maximumGlowRadius: CGFloat = 16
 
-    /// Tallest bar the measured foot drain applies to in full. Apple's island
-    /// bars top out around 13 pt and the spectrum page's around 126, and the
-    /// drain reads as depth at both — but it is a *proportional* gradient, so
-    /// on a fullscreen bar of 400+ pt the desaturated end owns most of the
-    /// shape and the whole wave goes pale. Past this height the foot is pulled
-    /// back toward the bar's own colour.
-    private static let fullDrainBarHeight: CGFloat = 130
-    /// How much drain survives at any size, so big bars keep some depth.
+    /// Tallest bar the measured foot drain applies to in full.
+    ///
+    /// The drain is a *proportional* gradient — top colour to a desaturated,
+    /// slightly brighter foot — measured off an iPhone's island, whose bars top
+    /// out around 13 pt. Spread over the spectrum page's ~140 pt bars the drained
+    /// end owns most of the shape, and a loud passage turns the whole wave pale;
+    /// at fullscreen it went white. The taller the bar, the less of it should be
+    /// drain, which is what dividing by its height does.
+    ///
+    /// 40 rather than 130 so the pull-back starts well before the page rather
+    /// than only past it. Everything the collapsed pill draws is under 40 pt, so
+    /// the pill keeps the full measured drain and is pixel-identical to before —
+    /// which matters, because that is the wave tuned against the real hardware.
+    private static let fullDrainBarHeight: CGFloat = 40
+
     private static let minimumDrain: CGFloat = 0.35
 
     /// The colour a bar's gradient ends on, held back on bars taller than the

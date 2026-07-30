@@ -517,7 +517,7 @@ final class MarketingShots: XCTestCase {
         guard levels.count > 8 else { return .greatestFiniteMagnitude }
         let peak = levels.max() ?? 0
         let low = levels.prefix(6).max() ?? 0
-        return abs(peak - 0.62) + 2 * max(0, 0.40 - low)
+        return abs(peak - 0.80) + 2 * max(0, 0.45 - low)
     }
 
 
