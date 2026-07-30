@@ -49,10 +49,17 @@ struct ExpandedView: View {
                 selection: $viewModel.selectedTab,
                 // .band/.expanded keep every tab; .solo/.condensing keep only the
                 // selected one, so the capsule can narrow onto it.
-                showsAllTabs: viewModel.islandState == .expanded || viewModel.islandState == .band
+                showsAllTabs: viewModel.islandState == .expanded || viewModel.islandState == .band,
+                isOpen: viewModel.islandState == .expanded
             )
             .frame(maxWidth: .infinity)
-            .frame(height: NotchLayout.currentCollapsedHeight + NotchLayout.tabBarTopInset)
+            // The pill's own band, at every stage — that is what puts the tab
+            // glyphs on exactly the y the pill's glyph occupies, which is the
+            // whole premise of the hard-cut handover. The open island's
+            // breathing room is padding *outside* the band, so it moves the
+            // band down without ever resizing it.
+            .frame(height: NotchLayout.currentCollapsedHeight)
+            .padding(.top, viewModel.islandState == .expanded ? NotchLayout.tabBarTopInset : 0)
             // Last beat of the opening: the island widens, the wave travels
             // into it, and the chrome fades up around them (see
             // `NotchViewModel.chromeRevealed`). Opacity only — the row keeps
@@ -94,8 +101,6 @@ struct ExpandedView: View {
                                 isLive: spectrum.isLive,
                                 isActive: nowPlaying.screensAwake,
                                 tint: tints.primary,
-                                secondaryTint: tints.secondary,
-                                tertiaryTint: tints.tertiary,
                                 coverBars: tints.coverBars,
                                 fixedBarCount: spectrumWaveBarCount
                             )

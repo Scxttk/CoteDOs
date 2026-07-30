@@ -2,12 +2,12 @@ import XCTest
 import SwiftUI
 @testable import CoteDOs
 
-/// Renders `WaveBarsView` offscreen — every style, plus the wide spectrum-only
-/// variant — and writes PNGs to `/tmp/notchmate-wavebars/`. Primarily a visual
-/// harness: the wave only exists animated on a live notch, and this is the one
-/// way to look at a frozen frame of it (and to let a review judge colour
-/// choices) without pointing a camera at the screen. The assertions just pin
-/// that every style renders at all.
+/// Renders `WaveBarsView` offscreen — with a cover palette, without one, and in
+/// the wide spectrum-only variant — and writes PNGs to
+/// `/tmp/notchmate-wavebars/`. Primarily a visual harness: the wave only exists
+/// animated on a live notch, and this is the one way to look at a frozen frame
+/// of it (and to let a review judge colour choices) without pointing a camera
+/// at the screen. The assertions just pin that it renders at all.
 ///
 /// Comparing a PNG against one from an earlier run only works when *the same
 /// tests* ran in both: a preceding `ImageRenderer` pass in the same process
@@ -26,37 +26,25 @@ final class WaveBarsSnapshotTests: XCTestCase {
         0.50, 0.30, 0.65, 0.85, 0.40, 0.75, 0.55, 0.25,
     ]
 
-    func testEveryStyleRendersAndWritesASnapshot() throws {
-        let settings = UserSettings.shared
-        let originalStyle = settings.spectrumStyle
-        let originalSource = settings.spectrumColorSource
-        defer {
-            settings.spectrumStyle = originalStyle
-            settings.spectrumColorSource = originalSource
-        }
-        settings.spectrumColorSource = .cover
-
+    /// The two colour paths the wave has: a real quantised cover palette, and
+    /// the no-cover fallback where the whole run draws in one toned-down accent.
+    func testWaveRendersWithAndWithoutACoverPalette() throws {
         try FileManager.default.createDirectory(at: Self.outputDirectory, withIntermediateDirectories: true)
 
-        // A warm red sleeve with teal and amber families — the three-stop case.
-        let tint = Color(hue: 0.97, saturation: 0.75, brightness: 0.85)
-        let secondary = Color(hue: 0.50, saturation: 0.65, brightness: 0.75)
-        let tertiary = Color(hue: 0.10, saturation: 0.80, brightness: 0.90)
-
-        // The spectrum-only pill at the widest setting — the layout the styles
+        // The spectrum-only pill at the widest setting — the layout the bars
         // are actually judged in.
         let geometry = NotchLayout.pillSpectrumGeometry(forWidth: NotchLayout.pillSpectrumMaxWidth)
+        let count = geometry.barCount
+        // A warm red sleeve, the accent `ArtworkColor` would hand over.
+        let tint = Color(hue: 0.97, saturation: 0.75, brightness: 0.85)
 
-        for style in UserSettings.SpectrumStyle.allCases {
-            settings.spectrumStyle = style
-
+        for (name, palette) in [("cover", coverPalette(count: count)), ("no-cover", nil)] as [(String, CoverBarPalette?)] {
             let wave = WaveBarsView(
                 isActive: true,
                 tint: tint,
-                secondaryTint: secondary,
-                tertiaryTint: tertiary,
+                coverBars: palette,
                 bands: bands,
-                count: geometry.barCount,
+                count: count,
                 maxHeight: geometry.waveHeight,
                 barWidth: geometry.barWidth,
                 spacing: geometry.spacing
@@ -67,11 +55,11 @@ final class WaveBarsSnapshotTests: XCTestCase {
 
             let renderer = ImageRenderer(content: wave)
             renderer.scale = 8   // 2pt bars are unjudgeable at 1:1
-            let image = try XCTUnwrap(renderer.cgImage, "style \(style.rawValue) failed to render")
+            let image = try XCTUnwrap(renderer.cgImage, "\(name) wave failed to render")
 
             let rep = NSBitmapImageRep(cgImage: image)
             let png = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
-            try png.write(to: Self.outputDirectory.appendingPathComponent("wave-\(style.rawValue).png"))
+            try png.write(to: Self.outputDirectory.appendingPathComponent("wave-\(name).png"))
         }
     }
 
@@ -83,16 +71,6 @@ final class WaveBarsSnapshotTests: XCTestCase {
     /// so this frame exists to judge exactly that: the edge bars should duck
     /// well below the crest (Apple's sit at ~16% of peak).
     func testSpectrumOnlyPillRendersAtBothEnds() throws {
-        let settings = UserSettings.shared
-        let originalStyle = settings.spectrumStyle
-        let originalSource = settings.spectrumColorSource
-        defer {
-            settings.spectrumStyle = originalStyle
-            settings.spectrumColorSource = originalSource
-        }
-        settings.spectrumStyle = .gradient
-        settings.spectrumColorSource = .cover
-
         try FileManager.default.createDirectory(at: Self.outputDirectory, withIntermediateDirectories: true)
 
         // A 32-band frame the way the analyzer would hand it over mid-song.
@@ -109,7 +87,7 @@ final class WaveBarsSnapshotTests: XCTestCase {
             let wave = WaveBarsView(
                 isActive: true,
                 tint: Color(hue: 0.97, saturation: 0.75, brightness: 0.85),
-                secondaryTint: Color(hue: 0.50, saturation: 0.65, brightness: 0.75),
+                coverBars: coverPalette(count: geometry.barCount),
                 bands: fullBands,
                 count: geometry.barCount,
                 maxHeight: geometry.waveHeight,
@@ -147,53 +125,11 @@ final class WaveBarsSnapshotTests: XCTestCase {
         return CoverBarPalette(bars: [count: row])
     }
 
-    /// `.coverImage` with an actual quantised palette — the branch the style
-    /// sweep above cannot reach, since it passes no `coverBars` and the style
-    /// therefore renders its no-artwork fallback. Worth a frame of its own:
-    /// this is the path where a bar's shading is precomputed alongside the
-    /// palette instead of derived while drawing.
-    func testCoverImageStyleRendersItsQuantisedPalette() throws {
-        let settings = UserSettings.shared
-        let originalStyle = settings.spectrumStyle
-        defer { settings.spectrumStyle = originalStyle }
-        settings.spectrumStyle = .coverImage
-
-        try FileManager.default.createDirectory(at: Self.outputDirectory, withIntermediateDirectories: true)
-
-        let geometry = NotchLayout.pillSpectrumGeometry(forWidth: NotchLayout.pillSpectrumMaxWidth)
-        let count = geometry.barCount
-        let wave = WaveBarsView(
-            isActive: true,
-            tint: Color(hue: 0.08, saturation: 0.80, brightness: 0.90),
-            coverBars: coverPalette(count: count),
-            bands: bands,
-            count: count,
-            maxHeight: geometry.waveHeight,
-            barWidth: geometry.barWidth,
-            spacing: geometry.spacing
-        )
-        .frame(width: geometry.runWidth, height: geometry.frameHeight)
-        .padding(14)
-        .background(Color.black)
-
-        let renderer = ImageRenderer(content: wave)
-        renderer.scale = 8
-        let image = try XCTUnwrap(renderer.cgImage, "coverImage with a palette failed to render")
-        let rep = NSBitmapImageRep(cgImage: image)
-        let png = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
-        try png.write(to: Self.outputDirectory.appendingPathComponent("wave-coverImage-palette.png"))
-    }
-
     /// The scalable form: the same wave asked to fill a page, and then a
     /// screen. Bar count and thickness are derived from the space, so this is
     /// the test that catches a stage that renders hairlines, slabs, or a run
     /// that doesn't sit centred in the area it was given.
     func testSpectrumStageScalesFromPanelToScreen() throws {
-        let settings = UserSettings.shared
-        let originalStyle = settings.spectrumStyle
-        defer { settings.spectrumStyle = originalStyle }
-        settings.spectrumStyle = .solid
-
         try FileManager.default.createDirectory(at: Self.outputDirectory, withIntermediateDirectories: true)
 
         let levels = SpectrumBands.forTesting(bands)

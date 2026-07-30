@@ -32,6 +32,10 @@ struct NotchTabBar: View {
     /// When false (`.solo`/`.condensing`), only the selected tab is present —
     /// the others have left the layout, letting the capsule narrow onto it.
     let showsAllTabs: Bool
+    /// Whether the island is resting open. `.band` shows every tab too, but at
+    /// pill height on the way past — a row that is about to be a pill, not an
+    /// interface. Only an open island is wide and tall enough to dress.
+    let isOpen: Bool
     /// Observed so the bar re-renders live when tabs are toggled in Settings.
     @ObservedObject private var settings = UserSettings.shared
 
@@ -41,7 +45,6 @@ struct NotchTabBar: View {
                 tab(value)
             }
         }
-        .padding(.top, showsAllTabs ? NotchLayout.tabBarTopInset : 0)
     }
 
     @ViewBuilder
@@ -63,8 +66,15 @@ struct NotchTabBar: View {
                         // Behind the glyph rather than around it, so the capsule
                         // can appear and disappear without moving anything: every
                         // item holds the same frame whether selected or not.
+                        //
+                        // It goes out with the open island, not with the tab bar.
+                        // Left to unmount with the row it survived the whole way
+                        // down — a grey slab filling the pill band, cut off by
+                        // the island's own clip, blinking out on the last frame.
+                        // Nothing is being selected between anyway once the row
+                        // is down to one tab.
                         Capsule(style: .continuous)
-                            .fill(.white.opacity(isSelected ? NotchLayout.tabSelectionFill : 0))
+                            .fill(.white.opacity(isSelected && isOpen ? NotchLayout.tabSelectionFill : 0))
                     }
                     .foregroundStyle(.white.opacity(isSelected ? 1 : NotchLayout.tabInactiveOpacity))
                     .contentShape(Capsule(style: .continuous))

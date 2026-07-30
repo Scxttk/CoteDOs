@@ -217,48 +217,6 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Appearance" } }
       }
     },
-    "settings.cover.brightness" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Helligkeit" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Brightness" } }
-      }
-    },
-    "settings.cover.brightnessLevels" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Helligkeitsstufen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Brightness steps" } }
-      }
-    },
-    "settings.cover.header" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Cover-Stil" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cover style" } }
-      }
-    },
-    "settings.cover.hint" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gilt nur für den Stil „Cover“. Änderungen wirken sofort auf den laufenden Titel — am besten bei spielender Musik einstellen." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Applies only to the “Cover” style. Changes take effect on the current track immediately — best adjusted with music playing." } }
-      }
-    },
-    "settings.cover.paletteSize" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Farben" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Colors" } }
-      }
-    },
-    "settings.cover.reset" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zurücksetzen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reset" } }
-      }
-    },
-    "settings.cover.saturation" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sättigung" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Saturation" } }
-      }
-    },
     "settings.data" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Daten" } },
@@ -421,24 +379,6 @@
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Reset complete." } }
       }
     },
-    "settings.spectrum.colorA" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Akzentfarbe 1" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Accent color 1" } }
-      }
-    },
-    "settings.spectrum.colorB" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Akzentfarbe 2" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Accent color 2" } }
-      }
-    },
-    "settings.spectrum.colorSource" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Farbquelle" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Color source" } }
-      }
-    },
     "settings.spectrum.header" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Sound-Spektrum" } },
@@ -447,8 +387,8 @@
     },
     "settings.spectrum.hint" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "„Nur Spektrum“ ersetzt das Mini-Cover in der eingeklappten Notch durch ein breiteres Spektrum mit mehr Balken — der Musik-Tab behält sein Cover. „Vom Cover“ leitet die zweite Farbe automatisch aus dem Album-Akzent ab. Der Bildschirmschoner übernimmt den Bildschirm, kurz bevor der Mac das Display abschaltet — nur wenn gerade Ton läuft. Er hält den Bildschirm wach; sobald du etwas anfasst oder die Musik aus ist, sperrt der Mac." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "“Spectrum instead of the cover” swaps the mini cover in the collapsed notch for a wider spectrum with more bars — the music tab keeps its cover. “From the cover” derives the second color from the album accent automatically. The screen saver takes the screen shortly before the Mac would switch the display off, and only while something is audible. It keeps the screen awake; the moment you touch anything or the music stops, the Mac locks." } }
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "„Nur Spektrum“ ersetzt das Mini-Cover in der eingeklappten Notch durch ein breiteres Spektrum mit mehr Balken — der Musik-Tab behält sein Cover. Die Farben der Balken kommen immer vom Album-Cover. Der Bildschirmschoner übernimmt den Bildschirm, kurz bevor der Mac das Display abschaltet — nur wenn gerade Ton läuft. Er hält den Bildschirm wach; sobald du etwas anfasst oder die Musik aus ist, sperrt der Mac." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "“Spectrum instead of the cover” swaps the mini cover in the collapsed notch for a wider spectrum with more bars — the music tab keeps its cover. The bars always take their colors from the album cover. The screen saver takes the screen shortly before the Mac would switch the display off, and only while something is audible. It keeps the screen awake; the moment you touch anything or the music stops, the Mac locks." } }
       }
     },
     "settings.spectrum.pillOnly" : {
@@ -467,12 +407,6 @@
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Als Bildschirmschoner bei Untätigkeit" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Use as a screen saver when idle" } }
-      }
-    },
-    "settings.spectrum.style" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Spektrum-Stil" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Spectrum style" } }
       }
     },
     "settings.suppressOSD" : {
@@ -611,48 +545,6 @@
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Spotify" } },
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Spotify" } }
-      }
-    },
-    "spectrum.colorSource.cover" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Vom Cover" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "From the cover" } }
-      }
-    },
-    "spectrum.colorSource.manual" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Manuell" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Manual" } }
-      }
-    },
-    "spectrum.style.alternating" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Alternierend" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Alternating" } }
-      }
-    },
-    "spectrum.style.coverImage" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Cover" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cover" } }
-      }
-    },
-    "spectrum.style.gradient" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verlauf" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gradient" } }
-      }
-    },
-    "spectrum.style.shades" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schattierungen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Shades" } }
-      }
-    },
-    "spectrum.style.solid" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Einfarbig" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Solid" } }
       }
     },
     "tab.capture" : {

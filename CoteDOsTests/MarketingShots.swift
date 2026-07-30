@@ -64,7 +64,6 @@ final class MarketingShots: XCTestCase {
                           "no system wallpaper at \(wallpaper.path)")
 
         let settings = UserSettings.shared
-        let originalStyle = settings.spectrumStyle
         let originalPillOnly = settings.pillSpectrumOnly
         let originalWidth = settings.pillSpectrumWidth
         // The stored presets are whatever this Mac's owner named them, in
@@ -73,7 +72,6 @@ final class MarketingShots: XCTestCase {
         // defaults.
         let originalPresets = settings.timerPresets
         defer {
-            settings.spectrumStyle = originalStyle
             settings.pillSpectrumOnly = originalPillOnly
             settings.pillSpectrumWidth = originalWidth
             settings.timerPresets = originalPresets
@@ -122,7 +120,6 @@ final class MarketingShots: XCTestCase {
         // async; let them land before anything is drawn.
         settle(1.2)
 
-        settings.spectrumStyle = .coverImage
         settings.pillSpectrumOnly = false
 
         func root() -> NotchRootView {
@@ -148,14 +145,6 @@ final class MarketingShots: XCTestCase {
 
         // --- one tile per tab, on the plate ---------------------------------
         for tab in NotchViewModel.Tab.allCases {
-            // Re-asserted per shot, not set once before the loop. `UserSettings`
-            // is UserDefaults-backed, and the tests run against the host app's own
-            // domain — the same one any copy of Côte d'OS actually running on this
-            // Mac reads and writes. Set once, it gets overwritten mid-run and the
-            // shots come out in whatever style that copy prefers, which is how the
-            // spectrum tab ended up rendering a white wave while the style strip
-            // beside it (which does re-assert) came out in full colour.
-            settings.spectrumStyle = .coverImage
             viewModel.selectedTab = tab
             viewModel.islandState = .expanded
             viewModel.pagesSettled = true
@@ -198,16 +187,13 @@ final class MarketingShots: XCTestCase {
                                      height: viewModel.collapsedHeight),
                   on: .desktop, named: "pill-shelf")
 
-        // --- the five spectrum styles, side by side -------------------------
-        try shootStyleStrip(spectrum: spectrum, nowPlaying: nowPlaying, settings: settings)
-
         // --- hero: the fullscreen takeover ----------------------------------
         try shootFullscreenHero(spectrum: spectrum, nowPlaying: nowPlaying)
 
         let written = try FileManager.default.contentsOfDirectory(atPath: Self.outputDirectory.path)
             .filter { $0.hasSuffix(".png") }
-        XCTAssertGreaterThanOrEqual(written.count, 10,
-            "expected the hero, a tile per tab, the pills, the strip and the takeover; got \(written.sorted())")
+        XCTAssertGreaterThanOrEqual(written.count, 9,
+            "expected the hero, a tile per tab, the pills and the takeover; got \(written.sorted())")
     }
 
     // MARK: - Rendering
@@ -287,58 +273,6 @@ final class MarketingShots: XCTestCase {
                           locations: stops.map(\.0))!
     }
 
-    /// One image holding all five colour styles of the same frame, for the
-    /// README's "five styles" row.
-    ///
-    /// Drawn at the spectrum page's size, not the pill's: the pill's bars are
-    /// ~2 pt wide, and five rows of those side by side read as five rows of
-    /// identical dots — which is the opposite of what the row is for.
-    private func shootStyleStrip(spectrum: SpectrumAnalyzer,
-                                 nowPlaying: NowPlayingManager,
-                                 settings: UserSettings) throws {
-        let tileSize = CGSize(width: 300, height: 108)
-        var tiles: [CGImage] = []
-
-        for style in UserSettings.SpectrumStyle.allCases {
-            settings.spectrumStyle = style
-            settle(0.1)
-            feedAudio(spectrum)
-            let tints = WaveTints.resolve(nowPlaying: nowPlaying, sourceBundleID: nil, sourceAppTint: nil)
-            let tile = VStack(spacing: 9) {
-                SpectrumStageView(
-                    levels: spectrum.bands,
-                    isLive: true,
-                    isActive: true,
-                    tint: tints.primary,
-                    secondaryTint: tints.secondary,
-                    tertiaryTint: tints.tertiary,
-                    coverBars: tints.coverBars
-                )
-                .frame(width: tileSize.width - 28, height: tileSize.height - 42)
-                Text(style.localizedName)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.6))
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(width: tileSize.width, height: tileSize.height)
-
-            tiles.append(try render(tile, rawSize: tileSize))
-        }
-
-        let tileW = CGFloat(tiles[0].width) / scale
-        let tileH = CGFloat(tiles[0].height) / scale
-        let strip = CGSize(width: tileW * CGFloat(tiles.count), height: tileH)
-        let context = try newContext(strip)
-        context.setFillColor(NSColor.black.cgColor)
-        context.fill(CGRect(origin: .zero, size: CGSize(width: strip.width * scale, height: strip.height * scale)))
-        for (index, tile) in tiles.enumerated() {
-            context.draw(tile, in: CGRect(x: CGFloat(index) * tileW * scale, y: 0,
-                                          width: tileW * scale, height: tileH * scale))
-        }
-        try write(try XCTUnwrap(context.makeImage()), named: "spectrum-styles")
-    }
-
     /// The fullscreen takeover, at the size it actually runs at.
     private func shootFullscreenHero(spectrum: SpectrumAnalyzer, nowPlaying: NowPlayingManager) throws {
         feedAudio(spectrum)
@@ -351,8 +285,6 @@ final class MarketingShots: XCTestCase {
             isLive: true,
             isActive: true,
             tint: tints.primary,
-            secondaryTint: tints.secondary,
-            tertiaryTint: tints.tertiary,
             coverBars: tints.coverBars
         )
         .frame(width: size.width, height: size.height)
@@ -497,8 +429,8 @@ final class MarketingShots: XCTestCase {
         // *best* and not the last, which is the mistake the first version made:
         // the synthetic track kicks every 0.5 s, so consecutive frames swing from
         // empty bass to clipping, and taking whatever frame the loop ended on gave
-        // a wave with its low half at zero and its peaks driven into the wave's
-        // white-hot overdrive. That reads as a colourless, lopsided rendering bug.
+        // a wave with its low half at zero and its peaks clipped
+        // flat against the ceiling. That reads as a lopsided rendering bug.
         var best = levels
         var bestScore = Self.frameScore(levels)
         for _ in 0..<24 {
@@ -510,8 +442,8 @@ final class MarketingShots: XCTestCase {
         settle(0.1)
     }
 
-    /// Lower is better: peak near 0.8 — high enough to look alive, below the
-    /// level where the wave whitens its tips — and the low bands carrying
+    /// Lower is better: peak near 0.8 — high enough to look alive, short of the
+    /// ceiling where the tall bars flatten out — and the low bands carrying
     /// something, because a spectrum with a dead bass end does not read as music.
     private static func frameScore(_ levels: [Float]) -> Float {
         guard levels.count > 8 else { return .greatestFiniteMagnitude }

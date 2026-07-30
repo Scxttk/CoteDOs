@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import CoteDOs
 
@@ -163,6 +164,47 @@ final class CollapsedGeometryTests: XCTestCase {
         let titles = Array(NotchViewModel.Tab.allCases.prefix(3).map(\.title))
         XCTAssertEqual(NotchLayout.tabBarFitScale(titles: titles), 1)
         XCTAssertEqual(NotchLayout.tabBarFitScale(titles: []), 1)
+    }
+
+    /// Real drawn sizes, because `tabIconSize` has been raised on the strength
+    /// of how the *open* island looked and then quietly broken the pill, which
+    /// has 24 pt and a pair of rounded ends to give. `.band` draws the whole row
+    /// at that height too. Anything taller is shaved by the island's clip.
+    func testEveryTabGlyphFitsThePillBand() {
+        let config = NSImage.SymbolConfiguration(pointSize: NotchLayout.tabIconSize, weight: .medium)
+        for tab in NotchViewModel.Tab.allCases {
+            guard let glyph = NSImage(systemSymbolName: tab.icon, accessibilityDescription: nil)?
+                .withSymbolConfiguration(config) else {
+                XCTFail("no symbol named \(tab.icon)")
+                continue
+            }
+            let size = glyph.size
+            XCTAssertLessThanOrEqual(size.height, NotchLayout.collapsedHeight - 2,
+                                     "\(tab.icon) is too tall for the 24 pt band")
+            XCTAssertLessThanOrEqual(size.width, NotchLayout.collapsedGlyphWidth,
+                                     "\(tab.icon) is wider than the pill budgets for it")
+        }
+    }
+
+    /// The idle pill is sized from `collapsedGlyphWidth`, so that estimate has to
+    /// cover the glyph *and* the padding around it — otherwise the content
+    /// overflows a capsule that is clipping it, and the glyph reads as shaved.
+    func testIdlePillHoldsItsGlyphWithoutClipping() {
+        let width = viewModel.collapsedWidth(isPlaying: false, hasItems: false, timerText: nil)
+        XCTAssertGreaterThanOrEqual(
+            width,
+            NotchLayout.collapsedGlyphWidth + 2 * NotchLayout.collapsedContentPadding,
+            "the idle pill must be at least its glyph plus the row's own padding")
+    }
+
+    /// The premise of the pill ⇄ tab-bar handover being a hard cut: the glyph is
+    /// in the same place on both sides of it. The tab bar reserves exactly the
+    /// pill's band and takes the open island's breathing room as padding outside
+    /// that band — grow the band instead and the glyph re-centres lower, which
+    /// is a visible jump on the last frame of every collapse.
+    func testTabBarReservesExactlyThePillBand() {
+        XCTAssertEqual(NotchLayout.tabItemHeight, NotchLayout.collapsedHeight,
+                       "a tab item is the pill band, filled")
     }
 
     // MARK: Shift

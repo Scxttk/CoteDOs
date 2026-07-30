@@ -17,8 +17,6 @@ struct LiveWaveBarsView: View {
 
     var isActive: Bool
     var tint: Color?
-    var secondaryTint: Color?
-    var tertiaryTint: Color?
     var coverBars: CoverBarPalette?
     var count: Int = 4
     var maxHeight: CGFloat = 26
@@ -33,8 +31,6 @@ struct LiveWaveBarsView: View {
         WaveBarsView(
             isActive: isActive,
             tint: tint,
-            secondaryTint: secondaryTint,
-            tertiaryTint: tertiaryTint,
             coverBars: coverBars,
             bands: (isLive && showsLiveBands) ? levels.values : nil,
             count: count,

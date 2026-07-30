@@ -55,59 +55,6 @@ final class UserSettings: ObservableObject {
         }
     }
 
-    /// Visual style for the now-playing spectrum bars (`WaveBarsView`).
-    /// `.solid` keeps every bar tinted the same (cover accent, or white when
-    /// there is no cover); `.alternating` and `.gradient` bring in a second accent
-    /// colour, sourced per `spectrumColorSource`.
-    enum SpectrumStyle: String, CaseIterable, Identifiable {
-        case solid
-        case shades
-        case alternating
-        case gradient
-        case coverImage
-
-        var id: String { rawValue }
-
-        var localizedName: String {
-            switch self {
-            case .solid: return String(localized: "spectrum.style.solid", defaultValue: "Einfarbig")
-            case .shades: return String(localized: "spectrum.style.shades", defaultValue: "Schattierungen")
-            case .alternating: return String(localized: "spectrum.style.alternating", defaultValue: "Alternierend")
-            case .gradient: return String(localized: "spectrum.style.gradient", defaultValue: "Verlauf")
-            case .coverImage: return String(localized: "spectrum.style.coverImage", defaultValue: "Cover")
-            }
-        }
-
-        /// Whether this style consults the second accent colour at all.
-        /// `.solid`/`.shades` are always single-hue from the cover, so the
-        /// colour-source and accent pickers are irrelevant for them.
-        var usesAccentPair: Bool {
-            switch self {
-            case .solid, .shades, .coverImage: return false
-            case .alternating, .gradient: return true
-            }
-        }
-    }
-
-    /// Where the two accent colours for `.alternating`/`.gradient` come from.
-    /// `.cover` derives them from the current track's artwork (same accent the
-    /// solid style already uses, plus a hue-shifted twin) so the spectrum keeps
-    /// matching whatever is playing. `.manual` uses the two fixed colours the
-    /// user picked in Settings.
-    enum SpectrumColorSource: String, CaseIterable, Identifiable {
-        case cover
-        case manual
-
-        var id: String { rawValue }
-
-        var localizedName: String {
-            switch self {
-            case .cover: return String(localized: "spectrum.colorSource.cover", defaultValue: "Vom Cover")
-            case .manual: return String(localized: "spectrum.colorSource.manual", defaultValue: "Manuell")
-            }
-        }
-    }
-
     /// How Quick Capture writes into the vault. `.silentAppend` is the default —
     /// it appends directly to the daily note's file without stealing focus.
     /// `.openInObsidian` does the same silent append, then reveals the note in
@@ -132,14 +79,6 @@ final class UserSettings: ObservableObject {
         static let liveActivitiesEnabled = "liveActivitiesEnabled"
         static let hudEnabled = "hudEnabled"
         static let suppressSystemOSD = "suppressSystemOSD"
-        static let spectrumStyle = "spectrumStyle"
-        static let coverPaletteSize = "coverPaletteSize"
-        static let coverBrightnessLevels = "coverBrightnessLevels"
-        static let coverBarSaturation = "coverBarSaturation"
-        static let coverBarBrightness = "coverBarBrightness"
-        static let spectrumColorSource = "spectrumColorSource"
-        static let spectrumColorA = "spectrumColorA"
-        static let spectrumColorB = "spectrumColorB"
         static let pillSpectrumOnly = "pillSpectrumOnly"
         /// Removed: the bar count is derived from `pillSpectrumWidth` now. Kept
         /// as a name only so the migration below can find and clear it.
@@ -191,30 +130,6 @@ final class UserSettings: ObservableObject {
     @Published var suppressSystemOSD: Bool {
         didSet { defaults.set(suppressSystemOSD, forKey: Key.suppressSystemOSD) }
     }
-    @Published var spectrumStyle: SpectrumStyle {
-        didSet { defaults.set(spectrumStyle.rawValue, forKey: Key.spectrumStyle) }
-    }
-    // Tuning for the `.coverImage` spectrum style. These four decide how hard
-    // the cover's colours are bundled and how they read on the black notch;
-    // exposed as controls because the right values are a matter of taste and
-    // depend on the covers you actually listen to. Changing any of them
-    // recomputes the current cover's palette live (`NowPlayingManager`).
-    /// How many cover colours the bars are quantised onto (1…5).
-    @Published var coverPaletteSize: Int {
-        didSet { defaults.set(coverPaletteSize, forKey: Key.coverPaletteSize) }
-    }
-    /// Brightness steps kept per bar (1 = flat colour, higher = more of the
-    /// cover's light and shade survives).
-    @Published var coverBrightnessLevels: Int {
-        didSet { defaults.set(coverBrightnessLevels, forKey: Key.coverBrightnessLevels) }
-    }
-    /// Multipliers on the bars' saturation and brightness (1.0 = as derived).
-    @Published var coverBarSaturation: Double {
-        didSet { defaults.set(coverBarSaturation, forKey: Key.coverBarSaturation) }
-    }
-    @Published var coverBarBrightness: Double {
-        didSet { defaults.set(coverBarBrightness, forKey: Key.coverBarBrightness) }
-    }
     /// Replace the collapsed pill's mini cover with a wider spectrum (more,
     /// longer bars) spanning the space the cover freed up. Pill only — the
     /// expanded music tab keeps its cover.
@@ -235,15 +150,6 @@ final class UserSettings: ObservableObject {
     /// sleep setting.
     @Published var spectrumScreensaverEnabled: Bool {
         didSet { defaults.set(spectrumScreensaverEnabled, forKey: Key.spectrumScreensaverEnabled) }
-    }
-    @Published var spectrumColorSource: SpectrumColorSource {
-        didSet { defaults.set(spectrumColorSource.rawValue, forKey: Key.spectrumColorSource) }
-    }
-    @Published var spectrumColorA: Color {
-        didSet { defaults.set(Self.encodeColor(spectrumColorA), forKey: Key.spectrumColorA) }
-    }
-    @Published var spectrumColorB: Color {
-        didSet { defaults.set(Self.encodeColor(spectrumColorB), forKey: Key.spectrumColorB) }
     }
 
     // MARK: Obsidian Quick Capture
@@ -370,10 +276,6 @@ final class UserSettings: ObservableObject {
             Key.filesTabEnabled: true,
             Key.captureTabEnabled: true,
             Key.timerTabEnabled: true,
-            Key.coverPaletteSize: 4,
-            Key.coverBrightnessLevels: 3,
-            Key.coverBarSaturation: 1.0,
-            Key.coverBarBrightness: 1.0,
             Key.pillSpectrumOnly: false,
             Key.pillSpectrumWidth: NotchLayout.pillSpectrumDefaultWidth,
             Key.spectrumScreensaverEnabled: true,
@@ -383,12 +285,6 @@ final class UserSettings: ObservableObject {
         self.liveActivitiesEnabled = defaults.bool(forKey: Key.liveActivitiesEnabled)
         self.hudEnabled = defaults.bool(forKey: Key.hudEnabled)
         self.suppressSystemOSD = defaults.bool(forKey: Key.suppressSystemOSD)
-        self.spectrumStyle = SpectrumStyle(rawValue: defaults.string(forKey: Key.spectrumStyle) ?? "") ?? .shades
-        self.spectrumColorSource = SpectrumColorSource(rawValue: defaults.string(forKey: Key.spectrumColorSource) ?? "") ?? .cover
-        self.coverPaletteSize = defaults.integer(forKey: Key.coverPaletteSize)
-        self.coverBrightnessLevels = defaults.integer(forKey: Key.coverBrightnessLevels)
-        self.coverBarSaturation = defaults.double(forKey: Key.coverBarSaturation)
-        self.coverBarBrightness = defaults.double(forKey: Key.coverBarBrightness)
         self.pillSpectrumOnly = defaults.bool(forKey: Key.pillSpectrumOnly)
         self.spectrumScreensaverEnabled = defaults.bool(forKey: Key.spectrumScreensaverEnabled)
         // The width used to mean "spread N bars across this much room", with N
@@ -403,8 +299,6 @@ final class UserSettings: ObservableObject {
         self.pillSpectrumWidth = max(NotchLayout.pillSpectrumMinWidth,
                                      min(NotchLayout.pillSpectrumMaxWidth,
                                          defaults.double(forKey: Key.pillSpectrumWidth)))
-        self.spectrumColorA = Self.decodeColor(defaults.data(forKey: Key.spectrumColorA)) ?? .cyan
-        self.spectrumColorB = Self.decodeColor(defaults.data(forKey: Key.spectrumColorB)) ?? .purple
         self.vaultBookmark = defaults.data(forKey: Key.vaultBookmark)
         self.vaultName = defaults.string(forKey: Key.vaultName) ?? ""
         self.dailyFolder = defaults.string(forKey: Key.dailyFolder) ?? "01-daily"
@@ -435,17 +329,6 @@ final class UserSettings: ObservableObject {
             && !captureTabEnabled && !timerTabEnabled {
             self.musicTabEnabled = true
         }
-    }
-
-    private static func encodeColor(_ color: Color) -> Data? {
-        try? NSKeyedArchiver.archivedData(withRootObject: NSColor(color), requiringSecureCoding: true)
-    }
-
-    private static func decodeColor(_ data: Data?) -> Color? {
-        guard let data,
-              let nsColor = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: data)
-        else { return nil }
-        return Color(nsColor)
     }
 
     private static func encodePresets(_ presets: [TimerPreset]) -> Data? {

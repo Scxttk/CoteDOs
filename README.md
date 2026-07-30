@@ -35,11 +35,7 @@
 
 A CoreAudio process tap on whatever your Mac is playing — 32 bands over a 2048-point FFT. It taps the *processes* making sound rather than the output device, which is the difference between this working and your AirPods' stem controls quietly breaking.
 
-Five colour styles. The last one quantises every bar onto the palette of the album-cover slice it sits over.
-
-<p align="center">
-  <img src="assets/spectrum-styles.png" width="880" alt="Solid, Shades, Alternating, Gradient, Cover">
-</p>
+Every bar is quantised onto the palette of the album-cover slice it sits over, then toned down into the band Apple's own now-playing bars occupy — muted, one light level across the run, no settings to get wrong.
 
 The wave belongs to whoever is making the sound, too. A Safari video tints the bars with Safari's blue — pulled from its icon, through the same colour election album art goes through — instead of borrowing the cover of whatever's paused in Spotify.
 

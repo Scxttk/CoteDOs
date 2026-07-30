@@ -183,8 +183,6 @@ private struct SpectrumFullscreenView: View {
                 isLive: spectrum.isLive,
                 isActive: nowPlaying.screensAwake,
                 tint: tints.primary,
-                secondaryTint: tints.secondary,
-                tertiaryTint: tints.tertiary,
                 coverBars: tints.coverBars,
                 // Out of the island's page on the way in, home to the pill on
                 // the way out. Not symmetric on purpose: Escape collapses the

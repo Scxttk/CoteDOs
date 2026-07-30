@@ -3,6 +3,54 @@
 All notable changes to Côte d'OS (formerly Ledge, formerly NotchMate — the
 bundle identifier still is NotchMate, see the README for why).
 
+## [Unreleased]
+
+### Changed
+- **The spectrum's colours now match the iPhone's.** Measured per bar off three
+  now-playing waveforms on a real iPhone — a vivid pink sleeve, a
+  red/orange/green one and a near-white pastel — Apple's bars sit at saturation
+  0.08–0.38 and, whatever the cover looks like, all peak at the same brightness.
+  Côte d'OS was running 0.63–0.81 and letting each colour keep its own light
+  level, so a bright orange bar sat 0.30 above the magenta one beside it and the
+  seam read as a break in the wave. The cover's colours are now toned *down*
+  rather than boosted, and every bar draws at one light level, with the
+  bar-to-bar shading doing the rest.
+  - The cause was narrow: the Cover style was the only one that never passed
+    through the ceiling the rest of the app used, and nothing checked. It does
+    now — a test holds every bar of four very different synthetic sleeves inside
+    the measured band.
+
+### Removed
+- **The spectrum's style and colour settings.** Solid, Shades, Alternating and
+  Gradient are gone, along with the colour source picker, the two accent colour
+  wells and the four Cover-style sliders. The wave takes its colours from the
+  album cover, the way it does on the phone, and there is nothing left to set
+  wrong. Existing preferences are simply no longer read.
+
+### Fixed
+- **Opening the notch on any tab but Spectrum flung the wave sideways.** The
+  pill's spectrum is one persistent run that travels to the spectrum page and
+  back, and it was kept mounted even while the island rested open somewhere
+  else — so it had to be shoved three page widths out of sight, at the
+  tab-change spring, every time you hovered. It is given up there instead and
+  dissolves where it stands. An actual tab change still slides it out with the
+  page it stands in for.
+- **The tab row was 9 pt too tall for the stage that draws it at pill height.**
+  `.band` keeps every tab but is only 24 pt, so the open island's breathing room
+  pushed the icons down into the island's own clip — the bottom of each one cut
+  off for that whole stage, then snapped back up on the next. The inset now sits
+  outside the band and only while the island is open, which also lands the
+  glyphs on exactly the y the pill's glyph occupies. That was the premise the
+  handover's hard cut rested on, and it had been lost.
+- **The selected tab's grey highlight blinked out rather than leaving.** It
+  survived the entire collapse and vanished with the row on the final frame.
+- **The pill drew its glyph too large for itself.** `TabIcon` sets its own size,
+  which silently overrode the smaller one the pill asked for — so raising the
+  tab icons to 17 pt raised the pill's with them. `radio.fill` measures 24 × 23
+  at that size, in a 24 pt band whose width estimate budgeted 14 pt for it, and
+  the capsule's rounded ends shaved its corners. 15 pt now, measured, with three
+  tests holding every glyph inside the band it has to fit.
+
 ## [1.5.0] – 2026-07-30
 
 The release where the wave gets the whole screen, and the app gets signed

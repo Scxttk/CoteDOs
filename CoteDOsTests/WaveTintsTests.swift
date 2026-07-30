@@ -50,13 +50,12 @@ final class WaveTintsTests: XCTestCase {
             hasCover: false, sourceBundleID: nil, playerBundleID: spotify))
     }
 
-    /// Cover-only decorations must not leak onto an app-icon tint: `secondary`,
-    /// `tertiary` and `coverBars` describe an album sleeve's colour families and
-    /// have no app-icon equivalent.
+    /// Cover-only decorations must not leak onto an app-icon tint: `coverBars`
+    /// describes an album sleeve's per-column colours and has no app-icon
+    /// equivalent, so a Safari wave draws in one accent rather than borrowing
+    /// whatever the last sleeve quantised to.
     func testAppIconTintCarriesNoCoverDecorations() {
         let tints = WaveTints(primary: .blue, fromCover: false)
-        XCTAssertNil(tints.secondary)
-        XCTAssertNil(tints.tertiary)
         XCTAssertNil(tints.coverBars)
         XCTAssertFalse(tints.fromCover)
     }

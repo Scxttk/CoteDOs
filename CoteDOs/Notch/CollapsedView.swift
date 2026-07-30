@@ -81,8 +81,6 @@ struct CollapsedView: View {
                             isLive: spectrum.isLive,
                             isActive: nowPlaying.screensAwake,
                             tint: tints.primary,
-                            secondaryTint: tints.secondary,
-                            tertiaryTint: tints.tertiary,
                             coverBars: tints.coverBars,
                             count: wave.barCount,
                             maxHeight: wave.waveHeight,
@@ -135,8 +133,6 @@ struct CollapsedView: View {
                         isLive: spectrum.isLive,
                         isActive: nowPlaying.screensAwake,
                         tint: tints.primary,
-                        secondaryTint: tints.secondary,
-                        tertiaryTint: tints.tertiary,
                         coverBars: tints.coverBars,
                         count: NotchLayout.collapsedWaveBarCount,
                         maxHeight: NotchLayout.collapsedWaveMaxHeight,
@@ -148,9 +144,12 @@ struct CollapsedView: View {
                 }
             } else if pomodoro.pillText == nil {
                 // Idle glyph reflects the tab you'd return to, so it isn't
-                // always the music icon when you last used another tab.
+                // always the music icon when you last used another tab. Sized by
+                // `TabIcon` itself — the same view the tab bar draws, so the two
+                // cannot drift apart and the hard-cut handover keeps its premise.
+                // (An outer `.font` here would be silently ignored; the one
+                // inside `TabIcon` wins, being closer to the leaf.)
                 TabIcon(tab: viewModel.selectedTab)
-                    .font(.system(size: NotchLayout.bandFontSize, weight: .medium))
             }
 
             // The focus-timer readout joins to the right of the artwork + wave

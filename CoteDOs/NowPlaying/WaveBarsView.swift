@@ -34,18 +34,8 @@ struct BarInk {
         self.footHSB = drained
     }
 
-    /// For styles that *derive* the colour and therefore already know its
-    /// components — no decomposition needed at all.
-    init(hsb: HSB) {
-        let drained = hsb.scaledHSB(saturation: Self.footSaturation, brightness: Self.footBrightness)
-        self.base = hsb.color
-        self.baseHSB = hsb
-        self.foot = drained.color
-        self.footHSB = drained
-    }
-
-    /// The `.coverImage` style: the quantised cover column, whose shading was
-    /// worked out once when the palette was built (see `CoverBarPalette.Bar`).
+    /// The quantised cover column, whose shading was worked out once when the
+    /// palette was built (see `CoverBarPalette.Bar`).
     init(coverBar: CoverBarPalette.Bar) {
         self.base = coverBar.top
         self.baseHSB = coverBar.topHSB
@@ -274,14 +264,9 @@ struct WaveCanvas: View, Animatable {
 struct WaveBarsView: View {
     var isActive: Bool
     var tint: Color?
-    /// The cover's real second and third colour families (see
-    /// `ArtworkAccents`), when it has them. Used by `.alternating`/`.gradient`
-    /// in "Vom Cover" mode; nil → a pair is derived from `tint` instead.
-    var secondaryTint: Color? = nil
-    var tertiaryTint: Color? = nil
-    /// Quantised cover colours (see `ArtworkColor.fetchBarPalette`) for the
-    /// `.coverImage` style: one colour per bar, taken from the slice of cover
-    /// that bar sits over. nil → the style falls back to `.solid` behaviour.
+    /// Quantised cover colours (see `ArtworkColor.fetchBarPalette`): one colour
+    /// per bar, taken from the slice of cover that bar sits over. nil → the
+    /// whole run draws in `tint`.
     var coverBars: CoverBarPalette? = nil
     /// Live per-band magnitudes (0…1). nil/empty → procedural fallback.
     var bands: [CGFloat]? = nil
@@ -298,101 +283,31 @@ struct WaveBarsView: View {
     /// run's *offset* with, or the wave arrives at its destination before (or
     /// after) it finishes growing — the two halves of one movement.
     var morphAnimation: Animation = NotchLayout.islandMorphAnimation
-    @ObservedObject private var settings = UserSettings.shared
     /// Decides whether the bars ease between updates — see the `body` comment.
     @ObservedObject private var power = PowerSource.shared
-
-    /// Per-bar fill: a top-to-bottom gradient whose *base* colour comes from the
-    /// chosen spectrum style — the same for every bar (`.solid`), alternating
-    /// between the two accent colours, or interpolated across the bar's position
-    /// for a continuous left-to-right ramp.
-    /// The two accents used by `.alternating`/`.gradient`. `.cover` derives them
-    /// from the current track's accent (same source the `.solid` tint uses) so
-    /// the spectrum keeps matching whatever is playing; `.manual` uses the
-    /// fixed pair chosen in Settings.
-    private var accentPair: (Color, Color) {
-        switch settings.spectrumColorSource {
-        case .manual:
-            return (settings.spectrumColorA, settings.spectrumColorB)
-        case .cover:
-            // Prefer the colour the sleeve actually contains; the synthetic
-            // hue-shift pair is only for covers without a real second accent.
-            if let tint, let secondaryTint { return (tint, secondaryTint) }
-            return Color.huePair(from: tint ?? .white)
-        }
-    }
-
-    /// The colour stops the `.gradient` style runs through, stage-vivid. Up to
-    /// three real cover colours; a single-hued cover still gets a two-stop run
-    /// via the synthetic pair so the wave never collapses to one flat colour.
-    private var gradientStops: [Color] {
-        let (a, b) = accentPair
-        var stops = [a, b]
-        if settings.spectrumColorSource == .cover, let tertiaryTint {
-            stops.append(tertiaryTint)
-        }
-        return stops.map(Color.stageVivid)
-    }
 
     // iOS's Dynamic Island wave bars are flat, fully-opaque colour top to
     // bottom — no fade. One solid colour per bar here too: fading each down to
     // 55% opacity, at how thin these bars are, makes the colour nearly
     // impossible to see at all.
-    /// The whole run's colours, built once per update rather than inside the draw
-    /// call. Per-bar-per-frame costs four ColorSync round-trips — ~2900/s for the
-    /// 32-bar pill at 30 fps, and the single biggest item in a `sample` of the
-    /// idling app.
+    /// The whole run's colours: one per bar, taken from the slice of cover that
+    /// bar sits over (see `ArtworkColor.fetchBarPalette`).
+    ///
+    /// Built once per update rather than inside the draw call. Per-bar-per-frame
+    /// costs four ColorSync round-trips — ~2900/s for the 32-bar pill at 30 fps,
+    /// and the single biggest item in a `sample` of the idling app.
     private func palette(total: Int) -> [BarInk] {
-        // No tint (no artwork, or the cover's dominant-colour extraction found
-        // no real hue) — default to white rather than a hardcoded accent,
-        // matching `ArtworkColor`'s own "no real colour here" answer.
-        let accent = tint.map(Color.stageVivid) ?? .white
-
-        switch settings.spectrumStyle {
-        case .coverImage:
-            // With a cover the bars carry the quantised palette; without one
-            // this style falls back to `.solid` behaviour, bar by bar.
-            let fallback = BarInk(accent)
-            guard let coverBars else { return Array(repeating: fallback, count: total) }
-            return (0..<total).map { index in
-                coverBars.bar(forBarAt: index, total: total).map(BarInk.init(coverBar:)) ?? fallback
-            }
-        case .solid:
-            return Array(repeating: BarInk(accent), count: total)
-        case .shades:
-            // Full saturation across the whole run, brightness climbing left to
-            // right — a lit VU ramp. Desaturating the left bars toward grey is
-            // what the iOS reference does, and at 16 bars it turns half the wave
-            // grey; on a black notch, grey reads as switched off.
-            let lit = HSB(Color.stageVivid(tint ?? .white))
-            return (0..<total).map { index in
-                let t = CGFloat(Self.position(of: index, total: total))
-                return BarInk(hsb: HSB(h: lit.h, s: lit.s, b: lit.b * (0.60 + 0.40 * t)))
-            }
-        case .alternating:
-            let stops = gradientStops.map(BarInk.init)
-            return (0..<total).map { stops[$0 % stops.count] }
-        case .gradient:
-            let stops = gradientStops.map(HSB.init)
-            return (0..<total).map { index in
-                BarInk(hsb: Self.multiStop(stops, t: Self.position(of: index, total: total)))
-            }
+        // No cover, or a sleeve whose colour extraction found no real hue — one
+        // toned-down accent across the run, falling back to `ArtworkColor`'s own
+        // "no real colour here" answer. That answer is white, and it goes
+        // through `stageVivid` like every other tint: a run of full-brightness
+        // white bars beside any cover's would be the brightest thing the wave
+        // ever draws, which is backwards for the case with the least to say.
+        let fallback = BarInk(Color.stageVivid(tint ?? .white))
+        guard let coverBars else { return Array(repeating: fallback, count: total) }
+        return (0..<total).map { index in
+            coverBars.bar(forBarAt: index, total: total).map(BarInk.init(coverBar:)) ?? fallback
         }
-    }
-
-    /// A bar's place in the run, 0…1.
-    private static func position(of index: Int, total: Int) -> Double {
-        total > 1 ? Double(index) / Double(total - 1) : 0
-    }
-
-    /// `t` (0…1) mapped across an evenly spaced run of `stops` — the wave
-    /// flows through every colour the cover offered, not just two.
-    private static func multiStop(_ stops: [HSB], t: Double) -> HSB {
-        guard stops.count > 1 else { return stops.first ?? HSB(.white) }
-        let clamped = max(0, min(1, t))
-        let scaled = clamped * Double(stops.count - 1)
-        let index = min(stops.count - 2, Int(scaled))
-        return stops[index].mixed(to: stops[index + 1], t: scaled - Double(index))
     }
 
     /// iOS's spectrum bars never fully bottom out — even a silent band keeps a
@@ -493,42 +408,32 @@ struct WaveBarsView: View {
 extension Color {
     private var hsb: HSB { HSB(self) }
 
-    /// The treatment a colour gets *only when painted as a spectrum bar*: bars
-    /// are two points of colour on a pure black field and need presence, while
-    /// the same accent stays calmer everywhere else — title glow, placeholder
-    /// tint. Keeps the hue; the bands below decide how loud it gets.
+    /// The treatment a colour gets *only when painted as a spectrum bar* — here,
+    /// the whole-run fallback for a track with no cover palette. The accent
+    /// stays as it is everywhere else (title glow, placeholder tint); a bar
+    /// carries the sleeve's hue at the wave's own weight.
     ///
-    /// The bands are set against Apple's own answer. The same cover run
-    /// through iOS's now-playing pipeline puts the Dynamic Island's bars at
-    /// H 0.559 / S 0.59 / B 0.60 at the tip, against an extracted accent of
-    /// H 0.563 / S 0.92 / B 0.96 — so Apple picks the *same hue* (1.4° apart)
-    /// and then tones it **down**. Pushing the other way, to S 0.95 / B 1.00, is
-    /// where a neon-looking wave comes from.
-    ///
-    /// So the ceilings sit on Apple's measured value. The floors stay, so a
-    /// washed-out cover doesn't produce a bar you can't see.
-    private static let barSaturation: ClosedRange<CGFloat> = 0.45...0.62
-    private static let barBrightness: ClosedRange<CGFloat> = 0.54...0.64
+    /// Same band `ArtworkColor.barVibrant` maps the cover's palette into, so the
+    /// fallback and a real palette read as the same material. Measured off three
+    /// iPhone now-playing waveforms: whatever the sleeve, Apple's bars land at
+    /// S 0.08–0.38 and B 0.43–0.67. Pushing the other way is where a
+    /// neon-looking wave comes from — our own cover style used to sit at
+    /// S 0.63–0.81 by boosting instead of toning down.
+    private static let barSaturation: ClosedRange<CGFloat> = 0.10...0.38
+    private static let barBrightness: ClosedRange<CGFloat> = 0.46...0.67
 
     static func stageVivid(_ color: Color) -> Color {
         let c = color.hsb
         // A genuinely neutral colour (white fallback, B/W cover) must stay
-        // neutral — saturating it would invent a hue that isn't there.
-        guard c.s > 0.02 else { return color }
+        // neutral — saturating it would invent a hue that isn't there. It still
+        // has to come down into the band, or it draws as a white bar.
+        guard c.s > 0.02 else {
+            return Color(hue: 0, saturation: 0, brightness: min(c.b, barBrightness.upperBound))
+        }
         return Color(
             hue: c.h,
             saturation: min(max(c.s, barSaturation.lowerBound), barSaturation.upperBound),
             brightness: min(max(c.b, barBrightness.lowerBound), barBrightness.upperBound)
         )
     }
-
-    /// A two-tone pair derived from a single base colour: same saturation and
-    /// brightness, hue shifted by ~130° so the pair reads as a deliberate
-    /// two-tone rather than a harsh full complementary clash.
-    static func huePair(from color: Color) -> (Color, Color) {
-        let c = color.hsb
-        let shifted = Color(hue: (c.h + 0.36).truncatingRemainder(dividingBy: 1), saturation: c.s, brightness: c.b)
-        return (color, shifted)
-    }
-
 }

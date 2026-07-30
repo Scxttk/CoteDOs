@@ -161,4 +161,90 @@ final class ArtworkColorTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(saturation, 0.30, "the blue must not be neutralised into grey")
         XCTAssertGreaterThanOrEqual(brightness, 0.40)
     }
+
+    // MARK: The bars' band
+
+    /// Every bar the cover pipeline produces has to land inside the band
+    /// measured off Apple's own now-playing waveform, whatever the sleeve looks
+    /// like — S 0.08–0.38, B 0.43–0.67, taken per bar from three iPhone
+    /// screenshots (a vivid pink cover, a red/orange/green one, and a near-white
+    /// pastel; see `ArtworkColor.barSaturation`).
+    ///
+    /// This is the regression that went unnoticed: `.coverImage` was the one
+    /// style that never passed through `stageVivid`'s ceiling, so `barVibrant`
+    /// boosted it to S 0.63–0.81 while every comment in the file explained that
+    /// Apple tones *down*. Nothing checked.
+    func testEveryCoverPutsItsBarsInsideTheMeasuredBand() throws {
+        let covers: [(String, Data)] = [
+            ("vivid two-tone", try pngCover { ctx in
+                ctx.setFillColor(CGColor(red: 0.95, green: 0.05, blue: 0.35, alpha: 1))
+                ctx.fill(CGRect(x: 0, y: 0, width: 32, height: 64))
+                ctx.setFillColor(CGColor(red: 0.05, green: 0.75, blue: 0.25, alpha: 1))
+                ctx.fill(CGRect(x: 32, y: 0, width: 32, height: 64))
+            }),
+            ("pastel", try pngCover { ctx in
+                ctx.setFillColor(CGColor(red: 0.96, green: 0.94, blue: 0.98, alpha: 1))
+                ctx.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+                ctx.setFillColor(CGColor(red: 0.62, green: 0.84, blue: 0.90, alpha: 1))
+                ctx.fillEllipse(in: CGRect(x: 8, y: 8, width: 40, height: 40))
+            }),
+            ("near-greyscale", try pngCover { ctx in
+                ctx.setFillColor(CGColor(red: 0.34, green: 0.34, blue: 0.36, alpha: 1))
+                ctx.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+                ctx.setFillColor(CGColor(red: 0.58, green: 0.57, blue: 0.60, alpha: 1))
+                ctx.fill(CGRect(x: 0, y: 30, width: 64, height: 14))
+            }),
+            ("black and white", try pngCover { ctx in
+                ctx.setFillColor(CGColor(gray: 0.04, alpha: 1))
+                ctx.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+                ctx.setFillColor(CGColor(gray: 0.97, alpha: 1))
+                ctx.fill(CGRect(x: 10, y: 10, width: 44, height: 44))
+            }),
+        ]
+
+        for (name, data) in covers {
+            let palette = try XCTUnwrap(ArtworkColor.barPalette(from: data),
+                                        "\(name): the cover produced no bar palette at all")
+            // Both ends of what the pill and the page ask for.
+            for count in [6, 32] {
+                for index in 0..<count {
+                    let bar = try XCTUnwrap(palette.bar(forBarAt: index, total: count),
+                                            "\(name): no bar at \(index)/\(count)")
+                    for (edge, color) in [("top", bar.top), ("bottom", bar.bottom), ("foot", bar.foot)] {
+                        let (_, saturation, brightness) = try hsb(color)
+                        let where_ = "\(name) bar \(index)/\(count) \(edge)"
+                        XCTAssertLessThanOrEqual(saturation, 0.40,
+                            "\(where_): S \(saturation) is above the band — the bars are boosting again")
+                        XCTAssertLessThanOrEqual(brightness, 0.70,
+                            "\(where_): B \(brightness) is above the band")
+                        XCTAssertGreaterThanOrEqual(brightness, 0.28,
+                            "\(where_): B \(brightness) is dark enough to read as a missing bar")
+                    }
+                }
+            }
+        }
+    }
+
+    /// The band is only half the point: the row also has to hold *one* light
+    /// level, which is what makes Apple's wave read as a single material. A
+    /// bright palette entry beside a dark one used to jump 0.30 in brightness
+    /// mid-row, and the seam was visible as a break in the wave.
+    func testNoTwoBarsJumpInBrightnessAcrossTheRow() throws {
+        // The worst case for this: a sleeve whose colours differ hugely in
+        // their own luminance — bright yellow against deep purple.
+        let data = try pngCover { ctx in
+            ctx.setFillColor(CGColor(red: 0.98, green: 0.85, blue: 0.10, alpha: 1))
+            ctx.fill(CGRect(x: 0, y: 0, width: 32, height: 64))
+            ctx.setFillColor(CGColor(red: 0.25, green: 0.05, blue: 0.45, alpha: 1))
+            ctx.fill(CGRect(x: 32, y: 0, width: 32, height: 64))
+        }
+        let palette = try XCTUnwrap(ArtworkColor.barPalette(from: data))
+        let brightnesses = try (0..<12).map { index -> CGFloat in
+            let bar = try XCTUnwrap(palette.bar(forBarAt: index, total: 12))
+            return try hsb(bar.top).brightness
+        }
+        let spread = (brightnesses.max() ?? 0) - (brightnesses.min() ?? 0)
+        XCTAssertLessThanOrEqual(spread, 0.25,
+            "yellow and purple bars must sit at one light level, not two (brightnesses \(brightnesses))")
+    }
 }

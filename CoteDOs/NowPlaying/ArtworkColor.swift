@@ -26,7 +26,6 @@ enum ArtworkColor {
     private static var cache: [URL: ArtworkAccents] = [:]
     private static var iconCache: [String: Color] = [:]
     private static var barPaletteCache: [URL: CoverBarPalette] = [:]
-    private static var cachedTuning = CoverBarTuning()
 
     /// Loads `url` off the main thread and calls back on the main thread with
     /// the cover's accents, or nil if they couldn't be derived. Results are
@@ -66,19 +65,13 @@ enum ArtworkColor {
 
     /// Quantised per-column cover colours for the `.coverImage` spectrum style.
     /// Results are cached per URL.
-    static func fetchBarPalette(from url: URL, tuning: CoverBarTuning, completion: @escaping (CoverBarPalette?) -> Void) {
-        // The cache holds colours computed for one particular tuning, so a
-        // changed slider has to throw it away rather than serve stale values.
-        if tuning != cachedTuning {
-            cachedTuning = tuning
-            barPaletteCache.removeAll()
-        }
+    static func fetchBarPalette(from url: URL, completion: @escaping (CoverBarPalette?) -> Void) {
         if let cached = barPaletteCache[url] {
             completion(cached)
             return
         }
         DispatchQueue.global(qos: .utility).async {
-            let palette = data(for: url).flatMap { barPalette(from: $0, tuning: tuning) }
+            let palette = data(for: url).flatMap(barPalette(from:))
             DispatchQueue.main.async {
                 if let palette { barPaletteCache[url] = palette }
                 completion(palette)
@@ -86,10 +79,9 @@ enum ArtworkColor {
         }
     }
 
-    /// The most recently loaded cover, kept so re-deriving the palette (which
-    /// happens on every tuning change, i.e. on every step of a slider drag)
-    /// doesn't re-download the JPEG each time. One entry is enough: only the
-    /// current track's cover is ever recomputed.
+    /// The most recently loaded cover, kept so the accents and the bar palette —
+    /// two passes over the same artwork — don't download the JPEG twice. One
+    /// entry is enough: only the current track's cover is ever analysed.
     private static var lastImageData: (url: URL, data: Data)?
     private static let imageDataLock = NSLock()
 
@@ -395,8 +387,19 @@ enum ArtworkColor {
 
     /// How dark the darkest brightness step draws, as a fraction of the palette
     /// colour's own brightness. Not lower: these bars sit on a black notch, and
-    /// a genuinely dark one just looks like it is missing.
+    /// a genuinely dark one just looks like it is missing. Against
+    /// `barBrightness` this puts the row's spread at 0.456…0.67, which is where
+    /// the iPhone reference sits.
     private static let barDarkestLevel: CGFloat = 0.68
+
+    /// How many colours the whole cover is reduced to. Four is enough for a
+    /// sleeve with a real second and third colour and few enough that
+    /// neighbouring bars still bundle into recognisable regions.
+    private static let paletteSize = 4
+
+    /// Brightness steps a bar's slice can land on. Three reads as shading;
+    /// more just adds steps nobody can tell apart at this bar width.
+    private static let brightnessLevels = 3
 
     /// The cell's brightness, snapped to `levels` steps and returned as 0…1.
     /// A single level means "flat colour" and always returns the top step.
@@ -411,7 +414,7 @@ enum ArtworkColor {
     /// rather than as a smear of it:
     ///
     /// 1. **Globally**, the whole cover is reduced to at most
-    ///    `tuning.paletteSize` colours (plus a neutral slot where the sleeve
+    ///    `paletteSize` colours (plus a neutral slot where the sleeve
     ///    has a large black/white/grey area). Every pixel is assigned to one.
     /// 2. **Per bar**, the cover is cut into as many vertical slices as there
     ///    are bars, and each slice elects the colour that covers the most of
@@ -421,7 +424,9 @@ enum ArtworkColor {
     /// The election is the point. Averaging a slice first invents colours the
     /// sleeve doesn't contain — red lettering on white averages to pink — and it
     /// washes out exactly the covers with the most character.
-    private static func barPalette(from data: Data, tuning: CoverBarTuning) -> CoverBarPalette? {
+    /// Internal rather than private so `ArtworkColorTests` can hold the bars to
+    /// their measured band without going through the async URL entry point.
+    static func barPalette(from data: Data) -> CoverBarPalette? {
         guard let (bitmap, width, height) = sample(data, side: barSampleSide),
               width > 2, height > 3
         else { return nil }
@@ -434,7 +439,7 @@ enum ArtworkColor {
         let analysis = hueBuckets(from: data)
         var palette: [(match: (r: CGFloat, g: CGFloat, b: CGFloat), color: Color)] = []
         for bucket in (analysis?.buckets ?? []) where bucket.share >= minimumPaletteShare {
-            guard palette.count < tuning.paletteSize else { break }
+            guard palette.count < paletteSize else { break }
             // Neighbouring hue buckets often describe the same colour region
             // (two shades of the same blue). Spending a palette slot on each
             // would split bars that should read as one colour, so a new entry
@@ -445,23 +450,24 @@ enum ArtworkColor {
                 return min(d, 1 - d) < minimumPaletteHueSeparation
             }
             if tooClose { continue }
-            palette.append((bucket.rgb, barVibrant(bucket.rgb, tuning: tuning)))
+            palette.append((bucket.rgb, barVibrant(bucket.rgb)))
         }
         if let analysis, analysis.neutralShare >= minimumNeutralShare {
             let luma = analysis.neutralLuma
-            // Drawn brighter than measured — a mid-grey bar on the black notch
-            // reads as missing rather than as part of the wave — and tinted
-            // towards the cover's dominant hue where there is one.
-            let brightness = clamped(min(0.88, max(0.7, luma * 1.4)) * tuning.brightness)
+            // Drawn at the same light level as every other entry rather than at
+            // its measured luma: a neutral slot that keeps its own brightness
+            // is the one bar that breaks the row's ramp, whether it lands too
+            // dark (reads as missing) or too bright (reads as a highlight).
+            // Tinted towards the cover's dominant hue where there is one.
             let color = palette.first.map {
-                Color(hue: hue(of: $0.match), saturation: clamped(neutralTintSaturation * tuning.saturation), brightness: brightness)
-            } ?? Color(white: brightness)
+                Color(hue: hue(of: $0.match), saturation: neutralTintSaturation, brightness: barBrightness)
+            } ?? Color(white: barBrightness)
             palette.append(((luma, luma, luma), color))
         }
 
         // Stage one, global: every pixel of the cover is assigned to the palette
         // entry it is closest to. From here on the cover *is* those few colours.
-        guard !palette.isEmpty else { return grayscaleBarPalette(bitmap: bitmap, width: width, geometry: geometry, tuning: tuning) }
+        guard !palette.isEmpty else { return grayscaleBarPalette(bitmap: bitmap, width: width, geometry: geometry) }
         var indexOf = [Int](repeating: 0, count: width * height)
         var brightnessOf = [CGFloat](repeating: 0, count: width * height)
         for y in geometry.y0..<geometry.y1 {
@@ -508,7 +514,7 @@ enum ArtworkColor {
             // slice, so a bar over a shaded part of one flat colour still reads
             // darker than a bar over its lit part.
             let mean = brightnessSum[winner] / CGFloat(votes[winner])
-            let level = brightnessLevel(of: (mean, mean, mean), levels: tuning.brightnessLevels)
+            let level = brightnessLevel(of: (mean, mean, mean), levels: brightnessLevels)
             return shadedStep(palette[winner].color, level: level)
         }
 
@@ -543,7 +549,7 @@ enum ArtworkColor {
     /// the same per-slice vote, but over brightness steps alone, so the bars
     /// go grey rather than borrowing a hue that isn't there.
     private static func grayscaleBarPalette(
-        bitmap: [UInt8], width: Int, geometry: SampleGeometry, tuning: CoverBarTuning
+        bitmap: [UInt8], width: Int, geometry: SampleGeometry
     ) -> CoverBarPalette {
         func barColor(x0: Int, x1: Int, y0: Int, y1: Int) -> Color {
             var sum: CGFloat = 0, n: CGFloat = 0
@@ -557,8 +563,10 @@ enum ArtworkColor {
                 }
             }
             let mean = n > 0 ? sum / n : 1
-            let level = brightnessLevel(of: (mean, mean, mean), levels: tuning.brightnessLevels)
-            return Color(white: clamped((0.55 + 0.4 * level) * tuning.brightness))
+            let level = brightnessLevel(of: (mean, mean, mean), levels: brightnessLevels)
+            // The same band the hued bars end up in, so a black-and-white
+            // sleeve sits at the wave's usual weight instead of glaring.
+            return Color(white: 0.46 + (barBrightness - 0.46) * level)
         }
 
         return CoverBarPalette { count in
@@ -586,23 +594,39 @@ enum ArtworkColor {
         return s
     }
 
-    /// `vibrant` with a harder push, for the spectrum bars specifically: they
-    /// are a couple of points wide on a black notch, where the tint's own
-    /// brightness floor still comes out looking dim and glassy. Saturation stops
-    /// short of the maximum so the result stays a colour, not a neon.
-    private static func barVibrant(_ rgb: (r: CGFloat, g: CGFloat, b: CGFloat), tuning: CoverBarTuning) -> Color {
+    /// `vibrant`'s opposite, for the spectrum bars specifically: the sleeve's
+    /// colour toned *down* rather than pushed up.
+    ///
+    /// Measured off three iPhone now-playing waveforms — Ado *New Genesis* (a
+    /// vivid pink sleeve), AAA *Wake up!* (red/orange/green) and PELICAN
+    /// FANCLUB *三原色* (near-white pastel). However loud the artwork is,
+    /// Apple's bars land at S 0.08–0.38, and every one of the three rows peaks
+    /// at B 0.65–0.67: the pastel cover and the dark one draw at the *same*
+    /// light level. Boosting was where our neon wave came from — the earlier
+    /// `max(0.40, s * 1.35)` put the same covers at S 0.63–0.81.
+    private static let barSaturation: ClosedRange<CGFloat> = 0.10...0.38
+
+    /// How far the sleeve's own saturation carries into the bar. Fitted to the
+    /// same three references: a raw 0.20 lands at 0.11, 0.48 at 0.26, 0.585 at
+    /// 0.32. This is the dial to reach for if the wave still reads hot — not
+    /// the clamp, which is what the reference actually measured.
+    private static let barSaturationScale: CGFloat = 0.55
+
+    /// One light level for every palette entry, so the row reads as a single
+    /// material lit from one side. Deliberately *not* derived from the entry's
+    /// own brightness: doing that is what put a magenta bar at B 0.52 next to
+    /// an orange one at B 0.82, and the seam between them was visible as a
+    /// break in the wave. The bar-to-bar ramp comes from `shadedStep` instead,
+    /// which spreads this across 0.456…0.67 — the measured band.
+    private static let barBrightness: CGFloat = 0.67
+
+    private static func barVibrant(_ rgb: (r: CGFloat, g: CGFloat, b: CGFloat)) -> Color {
         let ns = NSColor(red: rgb.r, green: rgb.g, blue: rgb.b, alpha: 1).usingColorSpace(.deviceRGB)
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         ns?.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-        // Tone-mapped like `vibrant()` (see there for why), with a slightly
-        // harder push and higher floors: these bars are two points wide on a
-        // black notch, and legibility needs a bit more than the big accent.
-        let saturation = clamped(min(0.90, max(0.40, s * 1.35)) * tuning.saturation)
-        let brightness = clamped(min(0.96, max(0.72, b * 1.25)) * tuning.brightness)
-        return Color(hue: h, saturation: saturation, brightness: brightness)
+        let saturation = min(barSaturation.upperBound, max(barSaturation.lowerBound, s * barSaturationScale))
+        return Color(hue: h, saturation: saturation, brightness: barBrightness)
     }
-
-    private static func clamped(_ v: CGFloat) -> CGFloat { min(1, max(0, v)) }
 
     /// Boost the bucket's average into something that reads as the cover's
     /// accent — tone-mapped, not floored. The old hard floors (saturation

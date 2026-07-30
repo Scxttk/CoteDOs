@@ -95,8 +95,6 @@ struct NowPlayingView: View {
                 showsLiveBands: nowPlaying.isPlaying,
                 isActive: nowPlaying.isPlaying && nowPlaying.screensAwake,
                 tint: nowPlaying.track != nil ? nowPlaying.artworkColor : nil,
-                secondaryTint: nowPlaying.track != nil ? nowPlaying.artworkSecondaryColor : nil,
-                tertiaryTint: nowPlaying.track != nil ? nowPlaying.artworkTertiaryColor : nil,
                 coverBars: nowPlaying.track != nil ? nowPlaying.coverBars : nil,
                 count: 6
             )

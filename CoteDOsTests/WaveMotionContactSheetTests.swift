@@ -70,13 +70,7 @@ final class WaveMotionContactSheetTests: XCTestCase {
             "the wave should visibly move between frames (per-frame max deltas: \(motion))")
 
         // Render the frames as a film strip for eyes-on review.
-        UserSettings.shared.spectrumColorSource = .cover
-        let originalStyle = UserSettings.shared.spectrumStyle
-        defer { UserSettings.shared.spectrumStyle = originalStyle }
-        UserSettings.shared.spectrumStyle = .gradient
-
         let tint = Color(hue: 0.97, saturation: 0.75, brightness: 0.85)
-        let secondary = Color(hue: 0.50, saturation: 0.65, brightness: 0.75)
 
         let geometry = NotchLayout.pillSpectrumGeometry(forWidth: NotchLayout.pillSpectrumMaxWidth)
         let sheet = VStack(spacing: 6) {
@@ -84,7 +78,6 @@ final class WaveMotionContactSheetTests: XCTestCase {
                 WaveBarsView(
                     isActive: true,
                     tint: tint,
-                    secondaryTint: secondary,
                     bands: bands,
                     count: geometry.barCount,
                     maxHeight: geometry.waveHeight,

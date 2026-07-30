@@ -15,8 +15,6 @@ import SwiftUI
 /// sound.**
 struct WaveTints {
     var primary: Color?
-    var secondary: Color?
-    var tertiary: Color?
     var coverBars: CoverBarPalette?
     /// Whether these came from the player's cover rather than the source app's
     /// icon. The pill's thumbnail branches on the same answer, so the artwork
@@ -41,16 +39,13 @@ struct WaveTints {
             playerBundleID: nowPlaying.activeSourceID.bundleID
         )
         guard playerOwnsIt else {
-            // Generic system audio: one accent from the app's icon. No
-            // secondary, tertiary or per-bar palette — those describe an album
-            // sleeve's colour families, and an app icon has no equivalent to
-            // fake.
+            // Generic system audio: one accent from the app's icon, and no
+            // per-bar palette — that describes an album sleeve's colour
+            // families, and an app icon has no equivalent to fake.
             return WaveTints(primary: sourceAppTint, fromCover: false)
         }
         return WaveTints(
             primary: nowPlaying.artworkColor,
-            secondary: nowPlaying.artworkSecondaryColor,
-            tertiary: nowPlaying.artworkTertiaryColor,
             coverBars: nowPlaying.coverBars,
             fromCover: true
         )

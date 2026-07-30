@@ -16,19 +16,18 @@ enum NotchLayout {
     /// (flush top, same height) so glyphs share the same y in both states.
     static let collapsedHeight: CGFloat = 24
 
-    /// Text/glyph size in the pill band and the tab bar — menu-bar-sized (13pt)
-    /// and identical in the collapsed and expanded state, so the hero glyph
-    /// neither rescales nor shifts between them.
-    static let bandFontSize: CGFloat = 13
-
     // MARK: Collapsed content metrics
     // The collapsed pill hugs whatever it shows, so its width is computed from
     // these element widths (see `NotchViewModel.collapsedWidth`). They must match
     // the `CollapsedView` layout. Getting this wrong shows up as clipped content,
     // because the island is clipped to the notch silhouette.
 
-    /// The lone `music.note` glyph shown when nothing is playing.
-    static let collapsedGlyphWidth: CGFloat = 14
+    /// The lone tab glyph shown when nothing is playing. Measured, not guessed:
+    /// at `tabIconSize` the widest of the five (`radio.fill`, `tray.full`) draws
+    /// 22pt across. It used to say 14, which left the glyph overflowing its own
+    /// pill — and since the pill is clipped to a capsule, the overflow was eaten
+    /// by the rounded ends and the glyph read as shaved down its sides.
+    static let collapsedGlyphWidth: CGFloat = 22
     /// Now-playing artwork thumbnail. Sized so it keeps ~5pt of black above it
     /// in the 24pt pill — at 16pt it sat visually pressed against (Scott:
     /// "abgeschnitten von") the top screen edge.
@@ -393,15 +392,22 @@ enum NotchLayout {
     /// readout, not for the tab row — the tab row has no labels left to measure.
     static let soloLabelCharWidth: CGFloat = 8
 
-    /// Roughly what a tab's glyph occupies at `bandFontSize`.
-    /// Point size the tab glyphs are drawn at. Independent of `bandFontSize`
-    /// on purpose: they used to inherit it, and a symbol set at its neighbouring
-    /// text's size always reads smaller than the text.
-    static let tabIconSize: CGFloat = 17
-    /// Tap target and capsule for one tab. Fixed for every tab, selected or not,
-    /// so marking the selection cannot move the row.
+    /// Point size the tab glyphs are drawn at — in the tab bar and, because the
+    /// pill's idle glyph is the very same `TabIcon`, in the pill too.
+    ///
+    /// Ceilinged by the pill, not by the tab bar: every state but `.expanded`
+    /// draws this glyph inside the 24pt band, clipped to a capsule. At 17pt
+    /// `radio.fill` measures 24×23 — taller than the band it sits in and wider
+    /// than the straight section between the capsule's rounded ends, so the pill
+    /// shaved its corners. 15pt puts the largest glyph at 22×20, which clears the
+    /// band by 2pt top and bottom. (Sizes are `NSImage.SymbolConfiguration`
+    /// measurements, not estimates.)
+    static let tabIconSize: CGFloat = 15
+    /// Tap target and selection capsule for one tab. Fixed for every tab,
+    /// selected or not, so marking the selection cannot move the row. Exactly
+    /// the band's height: the capsule is the band, filled.
     static let tabItemWidth: CGFloat = 38
-    static let tabItemHeight: CGFloat = 22
+    static let tabItemHeight: CGFloat = 24
     /// Fill behind the selected tab, standing in for the title it replaced.
     static let tabSelectionFill: Double = 0.16
     static let tabIconEstimatedWidth: CGFloat = 16
@@ -452,10 +458,14 @@ enum NotchLayout {
     /// size that band is the whole island and the tightness reads as correct; at
     /// 212 pt it reads as the icons being pressed against the rim.
     ///
-    /// Applied only while every tab is showing, so the row drops back into the
-    /// pill band exactly as the capsule narrows onto the selected icon — the
-    /// handover still lands, it just arrives on the last beat instead of never
-    /// having moved.
+    /// Applied only while the island is *open*, and pushing the whole band down
+    /// rather than growing it. Both halves of that matter. Growing the band
+    /// re-centres the glyphs inside a taller box, which lands them 4.5pt below
+    /// where the pill wants them and turns the handover into a jump. And every
+    /// stage but `.expanded` is 24pt tall — including `.band`, which shows all
+    /// five tabs at pill height — so an inset that keyed off "all tabs showing"
+    /// pushed the row 9pt down inside a 24pt island and the clip ate the bottom
+    /// third of every icon.
     static let tabBarTopInset: CGFloat = 9
     static let tabBarSpacing: CGFloat = 6
     /// Padding inside each tab button (around icon + label).

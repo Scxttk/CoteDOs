@@ -43,16 +43,6 @@ final class WaveMorphSheetTests: XCTestCase {
     /// Renders the interpolation the way `SpectrumStageView.growsFromPill` and
     /// `CollapsedView.arrivesFromPage` drive it.
     func testMorphInterpolatesWholeWavesAtEveryFraction() throws {
-        let settings = UserSettings.shared
-        let originalStyle = settings.spectrumStyle
-        let originalSource = settings.spectrumColorSource
-        defer {
-            settings.spectrumStyle = originalStyle
-            settings.spectrumColorSource = originalSource
-        }
-        settings.spectrumStyle = .gradient
-        settings.spectrumColorSource = .cover
-
         try FileManager.default.createDirectory(at: Self.outputDirectory, withIntermediateDirectories: true)
 
         let pill = NotchLayout.pillSpectrumGeometry(forWidth: NotchLayout.pillSpectrumMaxWidth)
@@ -66,7 +56,6 @@ final class WaveMorphSheetTests: XCTestCase {
                 WaveBarsView(
                     isActive: true,
                     tint: Color(hue: 0.97, saturation: 0.75, brightness: 0.85),
-                    secondaryTint: Color(hue: 0.50, saturation: 0.65, brightness: 0.75),
                     bands: bands,
                     count: page.barCount,
                     maxHeight: lerp(pill.waveHeight, page.waveHeight, t),

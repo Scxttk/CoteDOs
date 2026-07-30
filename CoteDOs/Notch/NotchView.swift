@@ -143,22 +143,29 @@ struct NotchRootView: View {
 
     /// Whether the travelling wave is mounted at all.
     ///
-    /// Deliberately *not* a function of where the island is: while it is active
-    /// this run is the only spectrum in the island, so it stays mounted through
-    /// every state and simply moves. Giving it up when the pages mount means the
-    /// spectrum page needs a second wave of its own, and that means a handover —
-    /// which can only ever be as invisible as the two independently mounted views'
-    /// poses happen to match. They don't. So there is nothing to hand over to.
+    /// It stays mounted across the whole pill↔page journey, which is the point:
+    /// giving it up when the pages mount means the spectrum page needs a second
+    /// wave of its own, and that means a handover — which can only ever be as
+    /// invisible as the two independently mounted views' poses happen to match.
+    /// They don't. So there is nothing to hand over to.
     ///
-    /// The exceptions are the two states where something else owns the pixels.
-    /// The fullscreen takeover covers the island completely and has a wave of
-    /// its own, so this one should not keep redrawing 30 times a second
-    /// underneath it. A live activity takes over the collapsed pill the same
-    /// way the pill hero does — but the hero is *content*, which the activity
-    /// replaces, while this wave is an overlay that no content swap can reach:
-    /// left mounted, it drew straight through the volume HUD's bar.
+    /// It is given up only where it has nowhere to be. An island resting open on
+    /// some other tab has no spectrum in it at all: the run belongs to the
+    /// spectrum page, which is off past the clip. Keeping it mounted there meant
+    /// the island opening on, say, Timer had to fling the wave three page widths
+    /// sideways to get it out of sight — a fast flick across an otherwise empty
+    /// island, every single time you hovered the notch.
+    ///
+    /// Two more states where something else owns the pixels. The fullscreen
+    /// takeover covers the island completely and has a wave of its own, so this
+    /// one should not keep redrawing 30 times a second underneath it. A live
+    /// activity takes over the collapsed pill the same way the pill hero does —
+    /// but the hero is *content*, which the activity replaces, while this wave is
+    /// an overlay that no content swap can reach: left mounted, it drew straight
+    /// through the volume HUD's bar.
     private var morphingWaveVisible: Bool {
         morphingWaveActive && !fullscreen.isPresented && !activityOwnsPill
+            && (waveIsOnPage || viewModel.islandState != .expanded)
     }
 
     /// Whether the wave currently belongs on the spectrum page rather than in
@@ -167,15 +174,36 @@ struct NotchRootView: View {
         viewModel.islandState == .expanded && viewModel.selectedTab == .spectrum
     }
 
-    /// How far the wave has to slide because the carousel has slid.
+    /// How the wave leaves when it is no longer the island's business.
     ///
-    /// The spectrum page lives in the carousel and moves with it, so an overlay
-    /// pinned to the island's centre would paint over whichever page is sliding
-    /// past. Rather than hand the wave over for the duration of a swipe, the run
-    /// travels the same
-    /// distance the page does — one page width per tab of separation, the same
-    /// arithmetic `ExpandedView` applies to the carousel — and the island's own
-    /// clip takes care of hiding it once it is off the edge.
+    /// Sideways when the carousel is what took it away, because then it is
+    /// standing in for a page that is itself sliding out: the spectrum page
+    /// lives in the carousel, this run is drawn above it, and a run that stayed
+    /// put would smear over whichever page slid in underneath. It travels
+    /// exactly the distance the page does — one page width per tab of
+    /// separation, the same arithmetic `ExpandedView` applies to the carousel —
+    /// and the island's own clip swallows it a page width in.
+    ///
+    /// A dissolve everywhere else, and *everywhere else is the common case*:
+    /// opening or closing the island is not carousel motion. It used to be
+    /// treated as though it were, which is how hovering the notch on any tab but
+    /// the spectrum flung the wave across the island the instant it landed open.
+    ///
+    /// `chromeRevealed` is the tell: a carousel can only have moved if there was
+    /// a dressed, open island to move it in. It is still false while the island
+    /// is landing — both on the staged walk and on the capture hotkey's jump
+    /// straight to `.expanded`, which is the same flick in a hurry. And a zero
+    /// shift means the tab did not change at all (the run gave up for some other
+    /// reason — the music stopped, a file landed on the shelf), so there is
+    /// nothing to slide.
+    private var waveExitTransition: AnyTransition {
+        let shift = waveCarouselShift
+        guard viewModel.chromeRevealed, viewModel.islandState == .expanded, shift != 0 else { return .opacity }
+        return .offset(x: shift)
+    }
+
+    /// How far the spectrum page has slid out of the island, and with it the run
+    /// that stands in for it. Zero on the spectrum page itself.
     private var waveCarouselShift: CGFloat {
         guard viewModel.islandState == .expanded else { return 0 }
         let tabs = NotchViewModel.Tab.allCases
@@ -214,8 +242,6 @@ struct NotchRootView: View {
             isLive: spectrum.isLive,
             isActive: nowPlaying.screensAwake,
             tint: tints.primary,
-            secondaryTint: tints.secondary,
-            tertiaryTint: tints.tertiary,
             coverBars: tints.coverBars,
             count: wave.barCount,
             maxHeight: wave.waveHeight,
@@ -228,14 +254,8 @@ struct NotchRootView: View {
         // `scaleEffect` scales about the frame's centre — so holding the frame
         // still is what keeps the shrunken run centred on the pill.
         .frame(width: wave.runWidth, height: wave.frameHeight)
-        .offset(
-            x: waveCarouselShift,
-            y: (onPage ? NotchLayout.pageWaveCentreY : NotchLayout.pillWaveCentreY) - wave.frameHeight / 2
-        )
+        .offset(y: (onPage ? NotchLayout.pageWaveCentreY : NotchLayout.pillWaveCentreY) - wave.frameHeight / 2)
         .animation(NotchLayout.islandMorphAnimation, value: onPage)
-        // The carousel's own spring, so the run slides in step with the page it
-        // stands in for rather than racing or trailing it.
-        .animation(NotchLayout.tabChangeAnimation, value: waveCarouselShift)
         .allowsHitTesting(false)
     }
 
@@ -300,8 +320,11 @@ struct NotchRootView: View {
                     // Fades rather than cuts: an activity arriving (the volume
                     // HUD is the common one) rides the island morph, and the
                     // wave should leave with it instead of blinking out a
-                    // frame early.
-                    if morphingWaveVisible { morphingWave.transition(.opacity) }
+                    // frame early. Arrivals always dissolve; only departures get
+                    // a say in how they go (see `waveExitTransition`).
+                    if morphingWaveVisible {
+                        morphingWave.transition(.asymmetric(insertion: .opacity, removal: waveExitTransition))
+                    }
                 }
                 .frame(width: islandWidth, height: islandHeight, alignment: .top)
                 .clipShape(shape)

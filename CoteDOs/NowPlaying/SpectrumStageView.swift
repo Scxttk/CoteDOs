@@ -17,8 +17,6 @@ struct SpectrumStageView: View {
     var isLive: Bool
     var isActive: Bool
     var tint: Color?
-    var secondaryTint: Color?
-    var tertiaryTint: Color?
     var coverBars: CoverBarPalette?
     /// Where this run comes from — the size and place it starts at, so it
     /// travels into position instead of appearing there. The pill for the
@@ -53,8 +51,6 @@ struct SpectrumStageView: View {
             WaveBarsView(
                 isActive: isActive,
                 tint: tint,
-                secondaryTint: secondaryTint,
-                tertiaryTint: tertiaryTint,
                 coverBars: coverBars,
                 bands: isLive ? levels.values : nil,
                 count: stage.barCount,
