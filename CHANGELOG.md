@@ -3,6 +3,83 @@
 All notable changes to Côte d'OS (formerly Ledge, formerly NotchMate — the
 bundle identifier still is NotchMate, see the README for why).
 
+## [1.5.0] – 2026-07-30
+
+The release where the wave gets the whole screen, and the app gets signed
+properly.
+
+**Read this one before updating:** 1.4 → 1.5 replaces the bundle, so macOS asks
+for the Audio Recording grant one more time. It is the last time. Until now the
+app was signed by a free personal team, which can only issue *development*
+signatures, and macOS treats every rebuild of one of those as a different app —
+so every update cost you that grant, and a dead spectrum afterwards looked like a
+bug in the app. From 1.5 the signature is a Developer ID, which survives updates.
+
+Also worth knowing: **the audio spectrum needs macOS 14.4**, not 14.0. CoreAudio
+process taps don't exist below that. Everything else in the app runs on 14.0, and
+the README never mentioned the difference.
+
+### Added
+- **The spectrum as a screen saver.** Leave the Mac alone with something audible
+  playing and, fifteen seconds before macOS would blank the display, the
+  fullscreen spectrum takes the screen instead and holds it awake. Touch
+  anything and it shrinks away — and the Mac locks behind it, because locking is
+  the half of display-sleep behaviour the takeover displaces. Quitting is not an
+  escape hatch either. On by default; the toggle is in Settings → Notch.
+  - It watches for *audible* audio, from the tap itself rather than from a
+    player's play button, so a browser video counts and a paused Spotify track
+    with a song loaded does not.
+  - It won't throw a spectrum over a fullscreen YouTube tab: if something else is
+    already holding a display-sleep assertion, it stands down.
+  - When an armed run ends it leaves a note in the pill saying *why* and *when* —
+    "Input 14:02" on a Mac you left at 13:50 is somebody else.
+- **Fullscreen spectrum, on demand.** ⌥⌘S from anywhere, or a second swipe down
+  on the spectrum tab. The run grows out of the island rather than appearing, and
+  swiping up plays it backwards.
+- **The wave belongs to whoever is making the sound.** A Safari video now tints
+  the bars with Safari's blue, pulled from its icon through the same colour
+  election album art goes through — instead of drawing white, or worse, borrowing
+  the cover of a paused track in Spotify.
+- **English.** The whole interface, not just the parts that happened to be
+  translated. Both permission prompts too.
+
+### Changed
+- **One wave at three sizes.** The pill, the spectrum page and the fullscreen
+  takeover are one continuous run that travels and grows, not three renderers
+  that hand off to each other. Widening the pill's wave now gives you fewer,
+  fatter bars in a taller pill — the page in miniature — instead of more
+  hairlines.
+- **The Safari dodge dodges the toolbar, not fullscreen.** Press `f` on a YouTube
+  or Twitch video and there is no toolbar to avoid, so the pill stays centred and
+  stays interactive.
+- The wave costs less on battery: it steps between spectrum updates instead of
+  easing, which is what the Dynamic Island does.
+- The menu bar's Quit item says "Quit Côte d'OS". It has been saying "Quit
+  NotchMate" since the rename, because the string catalog quietly overrode the
+  code.
+- Five tabs instead of six.
+
+### Removed
+- **The Claude tab.** It read Claude Code's OAuth credential out of the login
+  keychain, called an undocumented usage endpoint with it, and wrote refreshed
+  tokens back. Fine on my own Mac; not something to hand to strangers in a signed
+  release. Its one side effect: the app now makes **no network requests at all**.
+
+### Fixed
+- Around eighty interface strings fell back to German in every locale, English
+  included — the entire Obsidian pane, every spectrum and cover setting, the
+  whole capture surface, and two of the tab titles.
+- Five Settings labels had been showing older text than the code intended, for
+  the same reason as the Quit item. The volume/brightness toggle in particular
+  still called itself experimental.
+- A transient CoreAudio error during a suspend/resume cycle no longer disables
+  the spectrum until the next screen wake. Spotify holds its output stream open
+  while paused, so those cycles happen all day.
+- The tap survives an output-device change. AirPods in or out used to kill the
+  spectrum.
+- A small CoreAudio string leak on the path the resume probe walks every two
+  seconds.
+
 ## [1.4.0] – 2026-07-24
 
 The identity release: the app knows what it's called now, and when to
@@ -168,6 +245,7 @@ First release: now-playing controls in the notch, file shelf with drag & drop,
 Obsidian quick capture, live activities (battery, audio routes), and a
 volume/brightness HUD that replaces Apple's gray OSD.
 
+[1.5.0]: https://github.com/Scxttk/CoteDOs/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/Scxttk/CoteDOs/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/Scxttk/CoteDOs/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/Scxttk/CoteDOs/compare/v1.2.0...v1.2.1
